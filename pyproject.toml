@@ -1,0 +1,22 @@
+[build-system]
+requires = ["setuptools>=77"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "intuition-prototype"
+version = "0.1.0"
+description = "Local, offline-first environment scaffold for intuition research."
+requires-python = ">=3.12"
+dependencies = ["gradio>=6.26,<7"]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<10"]
+
+[project.scripts]
+intuition-ui = "intuition_prototype.app:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
