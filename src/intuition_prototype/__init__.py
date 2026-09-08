@@ -1,3 +1,3 @@
-"""Environment scaffold; no research controller or real LLM is implemented."""
+"""Offline environment and scripted simulator baseline; no learned controller or LLM."""
 
 __version__ = "0.1.0"
