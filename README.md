@@ -1,11 +1,34 @@
-# Intuition: local environment and Stage 1 scripted baseline
+# Intuition: bounded simulation and transparent inquiry policies
 
-The environment scaffold now includes **Stage 1: a bounded service simulator
-and an explicitly SCRIPTED inquiry baseline**, not learned intuition.
+## Abstract
+
+This project investigates whether an intelligent system can improve its reasoning
+by choosing what to question next, rather than merely producing longer answers.
+Clarification, experimentation, and reframing are treated as related ways to
+investigate uncertainty: evidence can justify continuing an inquiry, changing its
+direction, or stopping. The long-term goal is a learned selection policy that
+recognizes promising investigations, including opportunities revealed by
+unexpected results.
+
+The current prototype uses a reproducible service simulator, explicit hypotheses
+and evidence, persistent inquiry traces, a scripted baseline, and a transparent
+heuristic navigator with a bounded intelligence fuse. Frozen-policy comparative
+evaluation measures investigation usefulness and cost independently of the
+policies' own conclusions, within the simulator's declared mechanisms. This is
+research infrastructure, not a demonstration of AGI, consciousness, or learned
+intuition, and it currently makes no LLM calls.
+
+## Current status
+
+**Stage 2 is implemented:** a transparent evidence-based HEURISTIC navigator
+and intelligence fuse, alongside the preserved Stage 1 SCRIPTED baseline.
+Neither policy is learned intuition.
 It provides an importable Python package, standard-library SQLite storage,
 pytest tests, and a loopback-only Gradio health/demo and investigation interface.
 No GPU, paid provider, credentials, model downloads, or LLM API calls are needed.
-Successful scripted traces do **not** validate the intuition research hypothesis.
+Successful scripted or heuristic traces do **not** validate the intuition research
+hypothesis. Stage 3 adds a frozen, configuration-level comparative evaluation
+within the same simulator, not a test of unknown mechanisms.
 
 ## Selected platform
 
@@ -103,7 +126,8 @@ multi-user service. Do not expose it through a proxy, public tunnel, or LAN bind
 
 Use the existing environment/run/test commands above. In the UI select
 `worker_capacity`, `db_contention`, or `retry_amplification`, set a seed and
-budget, and click **Run scripted investigation**. The trace shows questions,
+budget, leave **Inquiry policy** set to `scripted`, and click **Run investigation**.
+The trace shows questions,
 preregistered predictions, actions, observations, discrepancies, claim updates,
 evidence references, action costs, and the stop reason.
 
@@ -221,6 +245,383 @@ SQLite retains run history until manually managed; there is no retention service
 Learned intuition, learned action selection, fuse training, real remote LLM
 integration, unrestricted real-world tools, and research validation remain deferred.
 
+## Stage 2: heuristic navigator and intelligence fuse
+
+Select `heuristic` in **Inquiry policy** to see scored alternatives and fuse
+decisions. `scripted` remains the default and retains its original investigation
+order, predictions, costs, and simulator outcomes. Environment health, offline
+echo, non-destructive reset, loopback binding, and privacy settings are unchanged.
+
+The existing CLI module supports both policies:
+
+```bash
+python -m intuition_prototype.stage1 --policy scripted --scenario retry_amplification --seed 7 --json
+python -m intuition_prototype.stage1 --policy heuristic --scenario retry_amplification --seed 7 --json
+python -m intuition_prototype.stage1 --policy heuristic --scenario db_contention --budget 4 --max-steps 6
+python -m pytest -q tests/test_navigator.py tests/test_stage1.py tests/test_smoke.py
+```
+
+The `stage1` CLI name is retained for compatibility. `--max-steps` defaults to 12;
+custom limits (integer 1..12) apply only to `heuristic`. Invalid policies, actions,
+capabilities, budget/step values, and persisted record data fail explicitly.
+No new dependencies, provider configuration, training, or model downloads are used.
+
+### Inspectable selection formula
+
+The agent-facing API adds only the supported intervention capability list. The
+navigator receives no case label, simulator parameters, seed, request internals,
+or snapshot contents. It never simulates a candidate just to score it.
+The evaluator alone selects the family and owns persistence metadata.
+
+For each supported intervention, the policy produces a question and a testable
+assumption. It also shows unsupported/inapplicable candidates as rejected audit
+rows. Estimates use observed baseline telemetry and the current hypothesis states
+(`untested`, `weakened`, `supported`):
+
+```text
+score = (2 * discrimination + 2 * relevance + evidence_gap
+         + novelty - 2 * redundancy) / test_action_cost
+```
+
+Components are 0..1 heuristic weights, **not probabilities**. Scores are rounded
+to six decimals, stored with their components, and validated on readback.
+The implementation uses these declared, hand-designed choices:
+
+| Component | Rule |
+| --- | --- |
+| Service ratio | unique completions / max(1, arrivals) in the baseline window |
+| Retry load | min(1, retries / max(1, arrivals)) |
+| Discrimination | worker and DB: 0.6; retry: 0.9 when retries exist, otherwise 0.1 |
+| Alternative-gap adjustment | after any weakened hypothesis, add 0.15 to untested alternatives' discrimination, capped at 1 |
+| Worker relevance | 1 if service ratio >=0.5 and no retries; otherwise 0.3 |
+| DB relevance | 1 if service ratio <0.5; otherwise 0.25 |
+| Retry relevance | observed retry load |
+| Evidence gap / novelty | each 1 for an untested assumption, otherwise 0 |
+| Redundancy | 1 for an already tested assumption, otherwise 0 |
+| Cost divisor | simulator test cost 2; a further reframe cost 1 is reserved for affordability |
+
+No service/queue anomaly means nonpositive queue growth **and** completions at
+least equal arrivals; all relevance scores become zero and tests are rejected.
+Retry suppression is rejected without observed new retries. Unsupported and
+already-tested interventions are rejected. Candidates also need budget for the
+test plus reframe (3 units) and slots for test, reframe, and terminal action
+(3 steps). Rejection reasons remain visible with the estimated scores.
+Eligible candidates are ordered by descending score, then lexical intervention
+key; input enumeration order cannot change a tie.
+
+The chosen question and prediction are recorded **before** execution. Both
+policies use the exact same declared prediction criteria described in Stage 1.
+Candidate nomination is not evidence: only a new measured result changes an
+assumption to supported/weakened.
+
+### Unified loop and fuse behavior
+
+The heuristic state machine uses one bounded `ask/test/reframe/answer/stop` loop:
+
+- **ask (cost 1):** read a simulator telemetry window, not a human question/API.
+- **test (cost 2):** apply one listed intervention from the identical warm
+  snapshot. Each intervention is tested at most once.
+- **reframe (cost 1):** locally replace a working assumption with an evidence-linked
+  supported/weakened interpretation. It requires a new result; it is not a
+  cosmetic repeat or an extra simulator operation.
+- **answer / stop (cost 0):** emit a local evidence-linked conclusion or unresolved
+  stop record. These consume a step and are not simulator operations or LLM calls.
+
+After every test, the **intelligence fuse** records triggers, alternatives,
+remaining-path assessment, and disposition. Any failed prediction triggers
+`contradictory_prediction`. Unchanged unique completions, queue growth, new retries,
+and duplicate completions increment a consecutive no-progress counter; the first
+is `no_progress`, the second is `repeated_no_progress`. These operational metrics
+do not exhaust every notion of information gain: a failed prediction can still
+usefully weaken a claim.
+
+The fuse immediately assesses untried alternatives on a contradiction rather than
+waiting for repeated failure. If another applicable action is affordable within
+the step cap, it records `switch_path`, pays for a meaningful reframe, and the
+loop selects again from the scored alternatives. It does not repeatedly spend on
+the same state/intervention. If a prediction matches, the answer reports limited
+support, never proof or calibrated confidence; model/policy agreement is not truth.
+
+Stop states distinguish `supported_interpretation`, `budget_exhausted`,
+`step_limit`, `investigations_exhausted`, and `inconclusive`. A healthy-looking
+window is inconclusive, not evidence of a unique cause. Budget can remain unused
+when it cannot fund a test plus evidence update. At most 12 actions and budget
+20 are allowed; the three available interventions further bound useful work.
+
+### Persistence compatibility
+
+SQLite initialization transactionally adds `policy` and `max_steps` columns to
+the original episode table. Existing Stage 1 rows are explicitly marked
+`scripted` with the original compatible step ceiling of 12; their records and IDs
+are not rewritten. No inference from missing or unknown record types is used.
+Typed `DecisionRecord`, `CandidateScore`, `FuseRecord`, and `AnswerRecord` add
+auditable decisions while preserving the original evidence and claims.
+Validation checks referenced records, costs/steps, candidate scores and choices,
+and the terminal answer. Legacy-schema readback and new-record roundtrips are tested.
+
+### Measured in-scope comparison (not held-out evaluation)
+
+Both policies were run at budget 10 on all three families with seeds **7, 17, 29**
+(18 episodes total). All reported `supported_interpretation` within this simulator:
+
+| Family | Scripted cost per seed | Heuristic cost per seed | Heuristic first action |
+| --- | ---: | ---: | --- |
+| Worker capacity | 4 | 4 | double_workers |
+| DB contention | 10 | 4 | double_db_capacity |
+| Retry amplification | 7 | 4 | disable_retries |
+
+For those seeds respectively, the final trial's unique completions / queue growth
+were identical across policies: workers **144/-23, 156/-29, 153/-25**;
+DB **46/75, 42/85, 42/86**; retries **21/61, 18/67, 18/68**.
+Retry scores for seed 7 are suppression **2.9**, DB **2.6**, workers **1.9**.
+The policy does not claim recovered retry-case throughput: the old duplicate
+backlog remains, and only new retry generation was disabled.
+
+A separate label-free test double checks fuse recovery: unchanged evidence after
+the first DB experiment triggers contradiction/no-progress and a reframe to the
+untried worker explanation. If workers then improve service, the policy answers;
+if they also return unchanged evidence, the fuse records repeated-no-progress and
+exhaustion. This synthetic test checks control flow, not simulator or research validity.
+
+The heuristics were designed with this simulator in view. These costs do **not**
+establish general superiority, causal identification, learned intelligence, or
+research validation. There is no calibrated information-gain model, learned
+selector, independent CPU/DB diagnosis, or formal held-out benchmark. The original
+simulator limitations remain.
+
+## Stage 3: frozen configuration-holdout comparison
+
+The benchmark compares the **unchanged Stage 2 policies**. Its predeclared primary
+endpoint is paired held-out utility difference (heuristic minus scripted); cost,
+regret, abstention and false-support metrics are secondary. Improvement is not an
+acceptance requirement. There is no LLM baseline because no provider/API is
+configured. No policy weights, scoring priorities, prediction thresholds, or fuse
+rules may be tuned after inspecting held-out outcomes.
+
+### Preparation and protocol
+
+Inside the activated WSL environment:
+
+```bash
+python -m intuition_prototype.benchmark prepare --output .runtime/stage3-replay --rerun-of published-stage3-v1 --invalidation-reason "Reproduce published results with portable fingerprints"
+python -m intuition_prototype.benchmark run --output .runtime/stage3-replay
+python -m intuition_prototype.benchmark report --output .runtime/stage3-replay
+python -m pytest -q tests/test_benchmark.py tests/test_navigator.py tests/test_stage1.py tests/test_smoke.py
+```
+
+`prepare` performs **no experiments**. It writes separate development/held-out
+configuration manifests, the scoring/construction protocol, source hashes,
+the Git base plus uncommitted-source provenance, and frozen source copies.
+Source identity normalizes CRLF to LF for portability across Git checkouts; exact
+raw hashes are also retained and verified for archived source files.
+Only then may `run` execute. All commands emit JSON. `report` verifies the stored
+artifacts without executing policies. Preparation requires a new output directory;
+execution is one-shot and will not overwrite or silently resume an earlier attempt.
+
+Default construction uses generator seed **20260908**, eight sampling regimes,
+**16 development configurations** (2/regime) and **48 held-out configurations**
+(6/regime). Each configuration is paired across policies with arrival seeds
+**101 and 202** at budget **10** and step cap **12**. Thus the full benchmark has
+128 paired seeded cases / 256 agent episodes, but only **64 configuration units**.
+The curated Stage 1 scenarios remain sanity/development tests, not held-out cases.
+
+Regimes cover worker pressure, DB pressure, retry pressure, mixed pressure,
+healthy headroom, low signal, retry-enabled headroom, and near balance.
+They are construction tags, **not sole true-cause labels**. Exact ranges are
+declared in `benchmark_protocol.py` and frozen in `protocol.json`. Within each
+regime, held-out initial-worker choices are disjoint from development choices;
+load, DB-capacity, lock-penalty and timeout ranges also shift. This is a parameter
+support/configuration holdout, **not new-mechanism generalization**.
+
+`SimulatorConfig` adds evaluator-only initial conditions: workers 2..16, DB
+capacity 1..64, lock penalty 0..0.25, retry timeout 1..1000, retry enablement, and
+integer arrival bounds 0..8. Doubling interventions operate relative to those
+initial resource values. The FIFO service, lock formula, work-per-attempt,
+timeouts, retry cap and horizon are unchanged. The original three families retain
+exactly their original observations and policy outcomes.
+
+Both policies receive the same restricted observation/action/snapshot interface.
+They never see configuration labels/parameters, manifests, external scores, or
+counterfactual measurements. Every trial restores the identical warm-state
+snapshot and arrival RNG; evaluator checks compare recorded policy observations
+against the reference windows. Warm-up and measurement windows remain 30 ticks.
+
+### Independent reference, not self-reported correctness
+
+The evaluator measures the baseline and **all three permitted single
+interventions** from the same state, separately from each policy. Let `C` be unique
+completions, `G` queue growth and `A` baseline arrivals. An intervention qualifies
+as independently beneficial only if it does not reduce `C` or increase `G`, and:
+
+```text
+completion gain >= max(3, ceil(0.10 * max(1, baseline C)))
+OR
+queue-growth reduction >= max(10, ceil(0.15 * max(1, abs(baseline G), A)))
+```
+
+These absolute/relative criteria are deliberately independent of policy
+predictions. Raw utility is `(completion gain + 0.25 * queue-growth reduction) /
+max(1, A)`. Qualifying interventions retain raw utility; otherwise utility is
+`min(0, raw utility)` so tiny unsupported gains are not rewarded and harms remain
+negative. Abstention has utility zero. The reference optimum is the maximum of
+zero and all permitted single-intervention utilities; regret is that optimum
+minus the policy recommendation's utility.
+
+A recommendation is the last actual tested intervention **only if** the policy
+ends with `supported_interpretation`; otherwise the policy abstains. This label
+selects what claim to score, **not whether it is correct**. Its evidence links are
+checked, and independent benefit/utility determines helpfulness. Reports include:
+
+- recommended utility and regret vs the best permitted single intervention;
+- agent cost and utility / (1 + agent cost), a declared index, not monetary cost;
+- helpful vs supported counts, supported-but-unhelpful rate among supports;
+- abstentions, missed available benefits and missed benefits despite testing them;
+- false-positive rate on oracle no-benefit cases, stop reasons and budget adherence;
+- paired configuration-mean ties/losses/wins, regime summaries and failure traces.
+
+No single-intervention benefit in a finite window is **not** proof that a multi-step
+cure is impossible. Retry suppression still leaves old duplicate work outstanding;
+reduced queue injection does not establish recovered throughput or a unique cause.
+Oracle work (4 measurement windows plus warm-up per paired seeded case) is reported
+separately from agent action costs.
+
+### Statistical unit and reproducibility
+
+Each configuration's two seed results are averaged **before** paired comparisons.
+The report uses 2,000 deterministic paired bootstrap resamples of configuration
+units **within sampling regimes**, seed 917, with percentile 95% intervals.
+These are descriptive intervals conditional on the declared generator, not
+population/generalization claims. Conditional false-positive/support rates are
+reported with explicit denominators; seed repeats are not independent samples.
+
+Artifacts under the ignored output directory:
+
+- `manifest.json`, `development.json`, `heldout.json`, `protocol.json`;
+- `freeze.json` and `sources/`: exact uncommitted policy/engine/evaluator provenance;
+- `raw.jsonl`: paired results, full typed traces and evaluator-only counterfactuals;
+- `report.json`, `report.md`: summaries, intervals, failure groups and sample traces;
+- `run-start.json`, `run-complete.json`: attempt lifecycle and output integrity hashes.
+
+Missing completion means an invalid/incomplete attempt. Changed sources,
+manifests or archived code fail verification. A corrected implementation must use
+a **new directory** with `prepare --rerun-of <prior-directory>
+--invalidation-reason "<explicit reason>"`; it is labeled a rerun, never a pristine
+held-out result. Frozen Stage 2 policy hashes must still match.
+
+Development-only preflight found a Markdown ordering/spacing defect on JSON
+roundtrip. Those preflight artifacts were invalidated and the renderer corrected
+**before any generated held-out policy outcomes were run**. The protocol records
+this history; policies and reference scoring criteria were not changed.
+
+The ordinary UI remains the small simulator/policy UI; no full benchmark runs at
+startup or from a UI callback. Inspect the report artifacts separately. Development
+traces can seed future learned-policy work, but inspected held-out configurations
+must not be treated as fresh test data after subsequent tuning.
+
+### First held-out run: measured findings
+
+The original declared full run completed once with unchanged frozen policy bytes
+and no policy tuning. Its local artifacts remain in `.runtime/stage3-v1/`.
+A subsequent publication-portability replay is explicitly distinguished below.
+
+- Manifest SHA256:
+  `ef396b6531608c1af65aff9ccb6770eeba1c0926056df20ad51e6af0665966bd`
+- Combined frozen policy SHA256:
+  `82866677c92969108d7069b12e1303b09ac02886398397127a2fcbbbb47b3101`
+- Preflight: **122 tests passed**, including all 98 pre-existing tests.
+- Full run: **64 configurations / 128 paired seeded cases / 256 policy episodes**.
+- Held-out analysis: **48 configurations / 96 paired seeded cases / 192 episodes**.
+- Evaluator-only work: **512 measurement windows / 19,200 advance ticks including
+  warm-ups**, not charged to the agents.
+
+Held-out means:
+
+| Policy | Independent utility | Regret | Agent cost | Utility/(1+cost) | Helpful supports | Abstentions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Scripted | 0.146397 | 0.037748 | 8.250 | 0.021720 | 48/48 | 48/96 |
+| Heuristic | 0.184145 | 0.000000 | 5.875 | 0.033323 | 48/48 | 48/96 |
+
+Paired configuration-level differences (heuristic minus scripted), with the
+predeclared descriptive 95% intervals:
+
+- Utility: **+0.037748**, interval **[+0.018787, +0.056623]**.
+- Regret: **-0.037748**, interval **[-0.056623, -0.018787]**.
+- Cost: **-2.375**, interval **[-2.500, -2.250]**.
+- Cost-adjusted utility: **+0.011602**, interval **[+0.009112, +0.013958]**.
+
+This was not a uniform win. **44/48 configurations tied on utility**, 4 favored
+the heuristic, and none favored the scripted policy on utility. In contrast,
+**6/48 configurations favored the scripted policy on cost and cost-adjusted
+utility**: every held-out worker-pressure configuration took heuristic cost 7
+versus scripted cost 4. Utility gains were concentrated in four retry-pressure
+configurations, not spread across the whole benchmark.
+
+Actual cost-loss trace: configuration `ec4a87945839fa220fef`, seed 101.
+The heuristic interpreted low completion/arrival ratio as a reason to test DB
+capacity first (score 2.6 versus workers 1.9). Baseline and DB trial both completed
+45 requests with queue growth 133. The fuse recorded contradiction/no-progress,
+reframed, and tried workers, which completed 90 with growth 88. It recovered the
+same independently useful recommendation as the scripted policy, but spent 3
+extra units. This is a real simulator trace, not a scripted test-double response.
+
+Actual scripted weakness: configuration `4e7ae414f529bae539a5`, seed 101. Doubling
+workers met its prediction and gave utility **0.043539**, so it stopped. The
+permitted reference optimum was **0.502809**, giving regret **0.459270**. Across
+held-out seeds, the scripted policy made 8 helpful-but-suboptimal recommendations;
+the heuristic made none under this particular reference.
+
+Both policies had zero budget violations, zero supported-but-unhelpful reports
+out of 48 supports, and zero no-benefit false positives out of 48 no-benefit cases.
+Both stopped with 48 supports and 48 exhausted investigations; neither missed a
+reference benefit through abstention. These zeros do **not** establish robust
+correctness: the suite did not expose those failure modes. A unit test explicitly
+demonstrates that policy support can fail the independent scorer.
+
+Important weaknesses of this benchmark:
+
+- Half of held-out seeded cases had no qualifying single-action benefit, and
+  only **20 distinct paired telemetry/counterfactual signatures** occurred among
+  the 48 parameter configurations. Quantized dynamics reduce behavioral diversity.
+- No-benefit cases still consumed heuristic cost 7 and scripted cost 10. The
+  policies can spend effort investigating tiny finite-window fluctuations.
+- Regimes and metric weights were hand-designed. Queue-relief weighting can favor
+  retry suppression; it is a declared utility choice, not universal correctness.
+- Construction and scoring were authored with knowledge of both policies. Cases
+  were held out from execution/tuning, not sourced from an independent benchmark.
+- Conditional bootstrap intervals describe this generator, not unknown
+  mechanisms, production systems, learned intuition, or general superiority.
+
+Data readiness: development contains 16 configurations, 32 paired seed cases,
+64 policy traces and all corresponding single-action reference outcomes. It is
+usable for a small future learned-policy prototype, not enough to substantiate
+learning claims. Held-out configurations have now been inspected; retain their
+evaluation provenance and construct a new untouched configuration split for any
+later tuned/learned policy. No learned selector has been implemented.
+
+### Publication portability correction and labeled replay
+
+Pre-push verification found that v1's raw source fingerprints depended on the
+local CRLF files, whereas the repository checks out LF files. This would have
+blocked benchmark preparation from a fresh clone. Protocol `stage3-v2-portable`
+normalizes only CRLF-to-LF for source identity, while separately preserving and
+validating raw archive hashes. The original v1 reports remain readable and intact;
+legacy execution requires a new declared attempt rather than silently changing it.
+
+No policy source, weight, threshold, simulator formula, generator or external
+scoring rule changed. A full replay under `.runtime/stage3-v2-portable/` records
+`attempt_classification: rerun`, its v1 predecessor and the portability correction
+as its invalidation reason. All **128 paired rows**, including complete policy
+traces, oracle effects and scores, match the original exactly after excluding the
+two provenance hashes. Split statistics and intervals also match exactly.
+This replay is **not fresh held-out evidence**.
+
+- Portable manifest SHA256:
+  `1c16d7c31f7c89e64469ec3220a82639e09772fac8fce2f4a5ec1cd6c9239fda`
+- LF-normalized policy SHA256:
+  `1c0a54add89307e8db8de00b42cd706c87e97848b2d681276e0ef4df433bed7f`
+- Publication validation: **123 tests passed**, including a line-ending portability
+  regression test. The differing hash is a representation change, not policy tuning.
+
 ## Architecture boundary
 
 - `config.py`: explicit validated demo configuration.
@@ -229,16 +630,24 @@ integration, unrestricted real-world tools, and research validation remain defer
   results, and episodes.
 - `simulator.py`: bounded queue dynamics and opaque snapshot/reset API.
 - `inquiry.py`: explicitly scripted, budgeted investigation policy.
+- `predictions.py`: shared declared prediction criteria for both policies.
+- `navigator.py`: evidence-based scoring, deterministic selection and intelligence fuse.
+- `benchmark_protocol.py`: declared parameter splits, frozen source/config fingerprints.
+- `benchmark.py`: independent counterfactual reference, paired evaluation and reports.
 - `storage.py`: original demo storage plus transactional typed episode persistence.
 - `stage1.py`: evaluator orchestration, persisted trace rendering, and CLI.
-- `app.py`: environment health, offline echo, and local Stage 1 Gradio interface.
+- `app.py`: environment health, offline echo, and local policy/trace interface.
 - `tests/test_smoke.py`: imports/configuration, SQLite initialize/write/read,
   health reporting, and UI construction.
 - `tests/test_stage1.py`: three families, acceptance trace, deterministic replay,
   action/budget bounds, evidence separation, persistence, and reset semantics.
+- `tests/test_navigator.py`: evidence-sensitive selection, tie stability, fuse recovery,
+  bounds, legacy-schema migration, score validation, and preserved baseline behavior.
+- `tests/test_benchmark.py`: split/config bounds, external scoring, frozen provenance,
+  development-only integration, integrity and report roundtrip.
 
-The Stage 1 records and scripted ask/test/reframe loop are foundations for later
-research, not an implementation of the proposed learned controller.
+Both policies are foundations for later research, not an implementation of the
+proposed learned controller.
 
 A future remote adapter must explicitly implement the protocol, extend mode
 validation and the factory, and define credentials, timeouts, error handling,

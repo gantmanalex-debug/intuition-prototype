@@ -6,7 +6,7 @@ from intuition_prototype.config import Settings
 from intuition_prototype.llm import create_adapter
 from intuition_prototype.storage import count_entries, initialize
 from intuition_prototype.simulator import SCENARIOS
-from intuition_prototype.stage1 import reset_stage1, run_stage1
+from intuition_prototype.stage1 import POLICIES, reset_stage1, run_stage1
 
 # Disable optional Gradio telemetry before its first import.
 os.environ["GRADIO_ANALYTICS_ENABLED"] = "False"
@@ -35,9 +35,9 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
     with gr.Blocks(analytics_enabled=False, title="Intuition Environment") as ui:
         gr.Markdown(
             "# Intuition environment\n"
-            "**OFFLINE / SCRIPTED ONLY.** No real LLM, learned controller, "
+            "**OFFLINE / SCRIPTED OR HEURISTIC ONLY.** No real LLM, learned controller, "
             "or unrestricted tool execution. Echo inputs are not saved. "
-            "Stage 1 simulator traces are saved locally in SQLite."
+            "Simulator inquiry traces are saved locally in SQLite."
         )
         health = gr.JSON(value=environment_health(settings), label="Environment health")
         refresh = gr.Button("Refresh health")
@@ -47,23 +47,27 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
         run = gr.Button("Echo in offline demo")
         run.click(adapter.generate, inputs=prompt, outputs=output, api_name=False)
         gr.Markdown(
-            "## Stage 1: bounded service simulator\n"
-            "Case names are evaluator labels, not inputs to the SCRIPTED inquiry policy. "
-            "Every Run starts fresh. No learned intuition or research validation is claimed."
+            "## Stage 2: evidence-based heuristic navigator\n"
+            "Choose the preserved scripted baseline or the transparent heuristic policy with "
+            "candidate scoring and an intelligence fuse. Case labels are never given to either "
+            "policy. Every Run starts fresh. No learned intuition or research validation is claimed."
         )
+        policy = gr.Dropdown(choices=list(POLICIES), value="scripted", label="Inquiry policy")
         scenario = gr.Dropdown(
             choices=list(SCENARIOS), value="retry_amplification", label="Evaluator scenario",
         )
         seed = gr.Number(value=7, precision=0, label="Reproducible seed (0..4294967295)")
         budget = gr.Slider(0, 20, value=10, step=1, label="Action budget")
-        run_case = gr.Button("Run scripted investigation", variant="primary")
+        run_case = gr.Button("Run investigation", variant="primary")
         reset_case = gr.Button("Reset scenario / clear viewer")
         episode_id = gr.Textbox(label="Persisted episode ID", interactive=False)
-        trace = gr.Markdown("Choose a case and run the scripted baseline.")
+        trace = gr.Markdown("Choose a case and policy, then run the investigation.")
 
-        def run_case_callback(case: str, case_seed: int, case_budget: int) -> tuple[str, str]:
+        def run_case_callback(
+            case: str, case_seed: int, case_budget: int, case_policy: str,
+        ) -> tuple[str, str]:
             try:
-                return run_stage1(settings.database_path, case, case_seed, case_budget)
+                return run_stage1(settings.database_path, case, case_seed, case_budget, case_policy)
             except ValueError as error:
                 raise gr.Error(str(error)) from error
 
@@ -74,7 +78,7 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
                 raise gr.Error(str(error)) from error
 
         run_case.click(
-            run_case_callback, inputs=[scenario, seed, budget],
+            run_case_callback, inputs=[scenario, seed, budget, policy],
             outputs=[episode_id, trace], api_name=False,
         )
         reset_case.click(

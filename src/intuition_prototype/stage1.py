@@ -6,19 +6,27 @@ import json
 from pathlib import Path
 
 from intuition_prototype.inquiry import run_inquiry
+from intuition_prototype.navigator import run_navigator
 from intuition_prototype.records import (
     Hypothesis, InterventionRecord, Observation, Prediction, Question, Result,
+    AnswerRecord, DecisionRecord, FuseRecord,
 )
 from intuition_prototype.simulator import QueueSimulator, SCENARIOS
 from intuition_prototype.storage import SavedEpisode, load_episode, save_episode
 
 
+POLICIES = ("scripted", "heuristic")
+
+
 def render_trace(saved: SavedEpisode) -> str:
     episode = saved.episode
     lines = [
-        "## SCRIPTED baseline trace (not an LLM or learned intuition)",
+        f"## {episode.policy.upper()} {'baseline' if episode.policy == 'scripted' else 'navigator'} "
+        "trace (not an LLM or learned intuition)",
         f"Run `{saved.id}` | evaluator case `{saved.scenario}` | seed `{saved.seed}`",
         f"**Cost: {episode.cost}/{episode.budget} | Stop: {episode.stop_reason}**",
+        f"Action steps: {sum(isinstance(record, InterventionRecord) for record in episode.records)}"
+        f"/{episode.max_steps}",
         f"**Interpretation:** {episode.interpretation}",
         "",
         "All trial windows restore the same warm-state snapshot and arrival RNG.",
@@ -61,17 +69,62 @@ def render_trace(saved: SavedEpisode) -> str:
                 f"{record.interpretation} Action {record.intervention_id}; "
                 f"prediction {record.prediction_id}; observation {record.observation_id}."
             )
+        elif isinstance(record, DecisionRecord):
+            rows = [
+                f"Remaining budget {record.remaining_budget}; chosen: {record.chosen_key or 'none'}. "
+                f"{record.reason} Hypothesis {record.hypothesis_id}; evidence {', '.join(record.evidence_ids)}.",
+                "",
+                "| Candidate | Score | Discrimination | Relevance | Gap | Novelty | Redundancy | Cost | Eligibility |",
+                "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
+            ]
+            for candidate in record.candidates:
+                rows.append(
+                    f"| {candidate.key} | {candidate.score:.3f} | {candidate.discrimination:.2f} "
+                    f"| {candidate.anomaly_relevance:.2f} | {candidate.evidence_gap:.0f} "
+                    f"| {candidate.novelty:.0f} | {candidate.redundancy:.0f} | {candidate.cost} "
+                    f"| {'eligible' if candidate.eligible else '; '.join(candidate.rejection_reasons)} |"
+                )
+            rows.extend(
+                f"\n- **{candidate.key}**: {candidate.question} {candidate.rationale}"
+                for candidate in record.candidates
+            )
+            text = "\n".join(rows)
+        elif isinstance(record, FuseRecord):
+            text = (
+                f"**Intelligence fuse: {record.disposition}**. "
+                f"Triggers: {', '.join(record.triggers) or 'none; prediction matched'}. "
+                f"No-progress count {record.no_progress_count}; "
+                f"eligible alternatives: {', '.join(record.alternate_keys) or 'none'}. "
+                f"{record.reason} Evidence: {', '.join(record.evidence_ids) or 'none'}."
+            )
+        elif isinstance(record, AnswerRecord):
+            text = (
+                f"{record.claim} Stop: {record.stop_reason}; terminal action {record.action_id}; "
+                f"evidence/claim references: {', '.join(record.evidence_ids) or 'none'}."
+            )
         lines.extend(("", f"{label}: {text}"))
     lines.extend((
         "",
         "**Limitation:** a successful scripted trace does not validate the research hypothesis. "
-        "This finite model omits production-system complexity and causal uniqueness.",
+        "Nor does a successful heuristic trace. Scores are hand-designed estimates, not learned "
+        "intuition, calibrated probabilities, or causal truth.",
     ))
     return "\n\n".join(lines)
 
 
-def run_stage1(database_path: Path, scenario: str, seed: int, budget: int) -> tuple[str, str]:
-    episode = run_inquiry(QueueSimulator(scenario, seed), budget)
+def run_stage1(
+    database_path: Path, scenario: str, seed: int, budget: int,
+    policy: str = "scripted", max_steps: int = 12,
+) -> tuple[str, str]:
+    if policy not in POLICIES:
+        raise ValueError(f"Unknown policy: {policy!r}. Choose from {POLICIES}.")
+    if policy == "scripted" and max_steps != 12:
+        raise ValueError("Custom step limits apply only to the heuristic policy.")
+    simulator = QueueSimulator(scenario, seed)
+    episode = (
+        run_inquiry(simulator, budget) if policy == "scripted"
+        else run_navigator(simulator, budget, max_steps)
+    )
     episode_id = save_episode(database_path, scenario, seed, episode)
     return episode_id, render_trace(load_episode(database_path, episode_id))
 
@@ -85,14 +138,18 @@ def reset_stage1(scenario: str, seed: int) -> tuple[str, str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate the SCRIPTED Stage 1 baseline.")
+    parser = argparse.ArgumentParser(description="Evaluate scripted or evidence-based heuristic inquiry.")
+    parser.add_argument("--policy", choices=POLICIES, default="scripted")
+    parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--scenario", choices=SCENARIOS, default="retry_amplification")
     parser.add_argument("--seed", type=int, default=7)
     parser.add_argument("--budget", type=int, default=10)
     parser.add_argument("--database", type=Path, default=Path(".runtime/intuition.sqlite3"))
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
-    episode_id, trace = run_stage1(args.database, args.scenario, args.seed, args.budget)
+    episode_id, trace = run_stage1(
+        args.database, args.scenario, args.seed, args.budget, args.policy, args.max_steps,
+    )
     print(
         json.dumps(asdict(load_episode(args.database, episode_id)), indent=2)
         if args.json else trace

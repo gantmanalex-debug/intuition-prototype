@@ -1,10 +1,9 @@
 """Explicitly scripted, bounded baseline; never reads evaluator family labels."""
 
-import math
-
+from intuition_prototype.predictions import make_prediction
 from intuition_prototype.records import (
     Action, ActionKind, Episode, Hypothesis, Intervention, InterventionRecord,
-    Observation, Prediction, Question, Record, Result,
+    Observation, Question, Record, Result,
 )
 from intuition_prototype.simulator import InvestigationEnvironment
 
@@ -66,24 +65,7 @@ def run_inquiry(environment: InvestigationEnvironment, budget: int = 10) -> Epis
         action = Action(ActionKind.TEST, intervention)
         if spent + action.cost > budget:
             return finish("budget_exhausted")
-        prediction = Prediction(
-            next_id(), hypothesis.id,
-            "At least 20% more unique completions AND strictly lower queue growth than baseline.",
-            max(1, math.ceil(baseline.metrics.completions * 1.2)),
-            baseline.metrics.queue_growth - 1,
-        )
-        if intervention == Intervention.DISABLE_RETRIES:
-            prediction = Prediction(
-                prediction.id, hypothesis.id,
-                "No fewer unique completions, at least 30% less queue growth "
-                "(and strictly less), and zero new retries.",
-                baseline.metrics.completions,
-                min(
-                    baseline.metrics.queue_growth - 1,
-                    math.floor(baseline.metrics.queue_growth * 0.7),
-                ),
-                0,
-            )
+        prediction = make_prediction(next_id(), hypothesis.id, baseline.metrics, intervention)
         records.append(prediction)
         action_id = record_action(action, question, prediction.id)
         environment.restore(checkpoint)

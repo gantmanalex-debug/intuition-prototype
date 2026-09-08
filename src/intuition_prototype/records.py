@@ -8,6 +8,8 @@ class ActionKind(str, Enum):
     ASK = "ask"
     TEST = "test"
     REFRAME = "reframe"
+    ANSWER = "answer"
+    STOP = "stop"
 
 
 class Intervention(str, Enum):
@@ -32,6 +34,8 @@ class Action:
 
     @property
     def cost(self) -> int:
+        if self.kind in (ActionKind.ANSWER, ActionKind.STOP):
+            return 0
         return 2 if self.kind == ActionKind.TEST else 1
 
 
@@ -108,7 +112,86 @@ class Result:
     interpretation: str
 
 
-Record = Observation | Hypothesis | Prediction | Question | InterventionRecord | Result
+@dataclass(frozen=True)
+class CandidateScore:
+    key: str
+    action: Action
+    question: str
+    assumption: str
+    discrimination: float
+    anomaly_relevance: float
+    evidence_gap: float
+    novelty: float
+    redundancy: float
+    cost: int
+    score: float
+    eligible: bool
+    rejection_reasons: tuple[str, ...]
+    rationale: str
+
+    def __post_init__(self) -> None:
+        if (
+            self.action.kind != ActionKind.TEST
+            or self.action.intervention is None
+            or self.key != self.action.intervention.value
+        ):
+            raise ValueError("Candidate must identify a supported test action.")
+        if self.cost != self.action.cost:
+            raise ValueError("Candidate cost does not match its action.")
+        components = (
+            self.discrimination, self.anomaly_relevance,
+            self.evidence_gap, self.novelty, self.redundancy,
+        )
+        if any(not 0 <= value <= 1 for value in components):
+            raise ValueError("Heuristic score components must be in [0, 1].")
+        if self.score != candidate_utility(*components, self.cost):
+            raise ValueError("Candidate score contradicts its components.")
+        if self.eligible != (not self.rejection_reasons):
+            raise ValueError("Candidate eligibility contradicts its rejection reasons.")
+
+
+def candidate_utility(
+    discrimination: float, relevance: float, gap: float,
+    novelty: float, redundancy: float, cost: int,
+) -> float:
+    return round((2 * discrimination + 2 * relevance + gap + novelty - 2 * redundancy) / cost, 6)
+
+
+@dataclass(frozen=True)
+class DecisionRecord:
+    id: str
+    hypothesis_id: str
+    evidence_ids: tuple[str, ...]
+    remaining_budget: int
+    candidates: tuple[CandidateScore, ...]
+    chosen_key: str | None
+    reason: str
+
+
+@dataclass(frozen=True)
+class FuseRecord:
+    id: str
+    evidence_ids: tuple[str, ...]
+    triggers: tuple[str, ...]
+    no_progress_count: int
+    alternate_keys: tuple[str, ...]
+    disposition: str
+    reason: str
+
+
+@dataclass(frozen=True)
+class AnswerRecord:
+    id: str
+    action_id: str
+    evidence_ids: tuple[str, ...]
+    claim: str
+    stop_reason: str
+
+
+Record = (
+    Observation | Hypothesis | Prediction | Question | InterventionRecord | Result
+    | DecisionRecord | FuseRecord | AnswerRecord
+)
 
 
 @dataclass(frozen=True)
@@ -118,3 +201,5 @@ class Episode:
     cost: int
     stop_reason: str
     interpretation: str
+    policy: str = "scripted"
+    max_steps: int = 12
