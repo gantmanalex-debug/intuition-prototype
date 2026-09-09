@@ -7,12 +7,21 @@ from intuition_prototype.records import (
     Action, ActionKind, AnswerRecord, CandidateScore, DecisionRecord, Episode, FuseRecord,
     Hypothesis, Intervention, InterventionRecord, Metrics, Observation, Question, Record, Result,
     candidate_utility,
+    ScoredCandidate,
 )
 from intuition_prototype.simulator import InvestigationEnvironment
 
 
 class NavigatorEnvironment(InvestigationEnvironment, Protocol):
     def capabilities(self) -> tuple[Intervention, ...]: ...
+
+
+class CandidateSelector(Protocol):
+    def __call__(
+        self, baseline: Metrics, capabilities: Sequence[Intervention],
+        hypothesis_states: Mapping[Intervention, str], remaining_budget: int,
+        remaining_steps: int = 12,
+    ) -> tuple[ScoredCandidate, ...]: ...
 
 
 _QUESTIONS = {
@@ -29,6 +38,10 @@ _QUESTIONS = {
         "The DB resource, rather than worker count alone, constrains useful service.",
     ),
 }
+
+
+def investigation_text(intervention: Intervention) -> tuple[str, str]:
+    return _QUESTIONS[intervention]
 
 
 def score_candidates(
@@ -89,14 +102,14 @@ def score_candidates(
     return tuple(candidates)
 
 
-def choose_candidate(candidates: Sequence[CandidateScore]) -> CandidateScore | None:
+def choose_candidate(candidates: Sequence[ScoredCandidate]) -> ScoredCandidate | None:
     if len({candidate.key for candidate in candidates}) != len(candidates):
         raise ValueError("Candidate keys must be unique.")
     eligible = [candidate for candidate in candidates if candidate.eligible]
     return min(eligible, key=lambda item: (-item.score, item.key)) if eligible else None
 
 
-def _stop_reason(candidates: Sequence[CandidateScore]) -> str:
+def _stop_reason(candidates: Sequence[ScoredCandidate]) -> str:
     # Ignore affordability once to distinguish a budget boundary from exhausted hypotheses.
     if any(
         candidate.rejection_reasons
@@ -121,7 +134,7 @@ def _stop_reason(candidates: Sequence[CandidateScore]) -> str:
 
 def assess_fuse(
     record_id: str, baseline: Observation, observed: Observation, result: Result,
-    candidates: Sequence[CandidateScore], no_progress_count: int,
+    candidates: Sequence[ScoredCandidate], no_progress_count: int,
 ) -> FuseRecord:
     unchanged = (
         observed.metrics.completions == baseline.metrics.completions
@@ -154,9 +167,12 @@ def assess_fuse(
     )
 
 
-def run_navigator(
+def run_navigation(
     environment: NavigatorEnvironment, budget: int = 10, max_steps: int = 12,
+    *, selector: CandidateSelector = score_candidates, policy: str = "heuristic",
 ) -> Episode:
+    if policy not in ("heuristic", "learned"):
+        raise ValueError("The shared navigation loop supports heuristic or learned selection only.")
     if type(budget) is not int or not 0 <= budget <= 20:
         raise ValueError("Budget must be an integer between 0 and 20.")
     if type(max_steps) is not int or not 1 <= max_steps <= 12:
@@ -177,7 +193,7 @@ def run_navigator(
         return f"r{len(records) + 1:03d}"
 
     def episode(reason: str) -> Episode:
-        return Episode(tuple(records), budget, spent, reason, interpretation, "heuristic", max_steps)
+        return Episode(tuple(records), budget, spent, reason, interpretation, policy, max_steps)
 
     def act(action: Action, question: str, prediction_id: str | None = None) -> str:
         nonlocal spent, steps
@@ -213,7 +229,7 @@ def run_navigator(
         elif phase == ActionKind.TEST:
             if baseline is None or hypothesis is None or checkpoint is None:
                 raise RuntimeError("Cannot investigate without baseline evidence and a snapshot.")
-            candidates = score_candidates(
+            candidates = selector(
                 baseline.metrics, capabilities, states, budget - spent, max_steps - steps,
             )
             chosen = choose_candidate(candidates)
@@ -251,7 +267,7 @@ def run_navigator(
             )
             records.append(result)
             states[intervention] = "supported" if matched else "weakened"
-            alternatives = score_candidates(
+            alternatives = selector(
                 baseline.metrics, capabilities, states, budget - spent - 1, max_steps - steps - 1,
             )
             records.append(DecisionRecord(
@@ -303,3 +319,9 @@ def run_navigator(
         no_progress, (), "step_limit", "Hard action-step limit reached; no further action is permitted.",
     ))
     return episode("step_limit")
+
+
+def run_navigator(
+    environment: NavigatorEnvironment, budget: int = 10, max_steps: int = 12,
+) -> Episode:
+    return run_navigation(environment, budget, max_steps)

@@ -9,6 +9,7 @@ from intuition_prototype.records import (
     Action, ActionKind, Episode, Hypothesis, Intervention, InterventionRecord,
     Metrics, Observation, Prediction, Question, Record, Result,
     AnswerRecord, CandidateScore, DecisionRecord, FuseRecord,
+    LearnedCandidateScore,
 )
 
 
@@ -98,7 +99,12 @@ def _decode_record(kind: str, payload: str) -> Record:
         for candidate in fields["candidates"]:
             candidate["action"] = _decode_action(candidate["action"])
             candidate["rejection_reasons"] = tuple(candidate["rejection_reasons"])
-            candidates.append(CandidateScore(**candidate))
+            if "model_sha256" in candidate:
+                for key in ("feature_names", "standardized_features", "coefficients"):
+                    candidate[key] = tuple(candidate[key])
+                candidates.append(LearnedCandidateScore(**candidate))
+            else:
+                candidates.append(CandidateScore(**candidate))
         fields["candidates"] = tuple(candidates)
     elif kind == "FuseRecord":
         fields["triggers"] = tuple(fields["triggers"])
@@ -121,11 +127,12 @@ def validate_episode(episode: Episode) -> None:
         "inconclusive", "step_limit",
     ):
         raise ValueError("Unknown episode stop reason.")
-    if episode.policy not in ("scripted", "heuristic"):
+    if episode.policy not in ("scripted", "heuristic", "learned"):
         raise ValueError("Unknown episode policy.")
     if type(episode.max_steps) is not int or not 1 <= episode.max_steps <= 12:
         raise ValueError("Invalid episode step limit.")
     seen: dict[str, Record] = {}
+    model_fingerprints: set[str] = set()
     cost = steps = 0
     for record in episode.records:
         if type(record).__name__ not in _RECORD_TYPES or record.id in seen:
@@ -153,6 +160,15 @@ def validate_episode(episode: Episode) -> None:
             references.extend((key, (Observation, Result)) for key in record.evidence_ids)
             if isinstance(record, DecisionRecord):
                 references.append((record.hypothesis_id, Hypothesis))
+                expected_type = LearnedCandidateScore if episode.policy == "learned" else CandidateScore
+                if any(not isinstance(candidate, expected_type) for candidate in record.candidates):
+                    raise ValueError("Candidate score schema contradicts the episode policy.")
+                model_fingerprints.update(
+                    candidate.model_sha256 for candidate in record.candidates
+                    if isinstance(candidate, LearnedCandidateScore)
+                )
+                if len(model_fingerprints) > 1:
+                    raise ValueError("A learned episode cannot mix model fingerprints.")
                 keys = [candidate.key for candidate in record.candidates]
                 if len(set(keys)) != len(keys) or not 0 <= record.remaining_budget <= episode.budget:
                     raise ValueError("Invalid decision candidates or remaining budget.")

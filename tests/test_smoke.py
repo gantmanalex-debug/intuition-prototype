@@ -42,11 +42,16 @@ def test_empty_database_path_is_rejected():
 
 def test_health_and_ui(tmp_path):
     database = tmp_path / "health.sqlite3"
-    settings = Settings.from_env({"INTUITION_DB_PATH": str(database)})
+    settings = Settings.from_env({
+        "INTUITION_DB_PATH": str(database),
+        "INTUITION_MODEL_PATH": str(tmp_path / "not-trained.json"),
+    })
     health = environment_health(settings)
     assert health["mode"] == "demo"
     assert health["stored_demo_entries"] == 0
     assert health["database"] == str(database.resolve())
+    assert health["learned_model_path"] == str(settings.model_path.resolve())
+    assert health["learned_model_file_present"] == 0
     ui = build_ui(settings)
     assert ui.analytics_enabled is False
     ui.close()

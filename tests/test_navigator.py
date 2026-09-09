@@ -348,4 +348,4 @@ def test_policy_orchestration_and_readable_trace(tmp_path, policy):
     if policy == "heuristic":
         assert all(term in trace for term in ("Candidate", "Score", "Intelligence fuse", "AnswerRecord"))
     with pytest.raises(ValueError, match="Unknown policy"):
-        run_stage1(database, "retry_amplification", 7, 10, "learned")
+        run_stage1(database, "retry_amplification", 7, 10, "unknown")

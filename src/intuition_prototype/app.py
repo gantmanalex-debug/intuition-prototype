@@ -22,7 +22,9 @@ def environment_health(settings: Settings) -> dict[str, str | int]:
         "sqlite": sqlite3.sqlite_version,
         "gradio": gr.__version__,
         "mode": settings.mode,
-        "llm": "Offline deterministic demo; no model or remote API calls",
+        "llm": "Offline deterministic demo; no LLM or remote API calls",
+        "learned_model_path": str(settings.model_path.resolve()),
+        "learned_model_file_present": int(settings.model_path.is_file()),
         "database": str(settings.database_path.resolve()),
         "stored_demo_entries": count_entries(settings.database_path),
         "sqlite_status": "Schema initialization and query succeeded",
@@ -35,7 +37,7 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
     with gr.Blocks(analytics_enabled=False, title="Intuition Environment") as ui:
         gr.Markdown(
             "# Intuition environment\n"
-            "**OFFLINE / SCRIPTED OR HEURISTIC ONLY.** No real LLM, learned controller, "
+            "**OFFLINE / BOUNDED INQUIRY ONLY.** No real LLM, general-purpose reasoning model, "
             "or unrestricted tool execution. Echo inputs are not saved. "
             "Simulator inquiry traces are saved locally in SQLite."
         )
@@ -47,10 +49,11 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
         run = gr.Button("Echo in offline demo")
         run.click(adapter.generate, inputs=prompt, outputs=output, api_name=False)
         gr.Markdown(
-            "## Stage 2: evidence-based heuristic navigator\n"
-            "Choose the preserved scripted baseline or the transparent heuristic policy with "
-            "candidate scoring and an intelligence fuse. Case labels are never given to either "
-            "policy. Every Run starts fresh. No learned intuition or research validation is claimed."
+            "## Stage 4: small learned action selector\n"
+            "Choose scripted, heuristic, or a fitted ridge selector over the same three predefined "
+            "interventions. The learned option requires a trained local model; it never falls back "
+            "silently. Case labels are not policy inputs. Every Run starts fresh. "
+            "No learned question discovery, LLM, AGI, or learned intuition is claimed."
         )
         policy = gr.Dropdown(choices=list(POLICIES), value="scripted", label="Inquiry policy")
         scenario = gr.Dropdown(
@@ -67,7 +70,10 @@ def build_ui(settings: Settings | None = None) -> gr.Blocks:
             case: str, case_seed: int, case_budget: int, case_policy: str,
         ) -> tuple[str, str]:
             try:
-                return run_stage1(settings.database_path, case, case_seed, case_budget, case_policy)
+                return run_stage1(
+                    settings.database_path, case, case_seed, case_budget, case_policy,
+                    model_path=settings.model_path,
+                )
             except ValueError as error:
                 raise gr.Error(str(error)) from error
 

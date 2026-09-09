@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
+import math
 
 
 class ActionKind(str, Enum):
@@ -158,12 +159,64 @@ def candidate_utility(
 
 
 @dataclass(frozen=True)
+class LearnedCandidateScore:
+    key: str
+    action: Action
+    question: str
+    assumption: str
+    cost: int
+    score: float
+    predicted_utility: float
+    threshold: float
+    eligible: bool
+    rejection_reasons: tuple[str, ...]
+    rationale: str
+    model_sha256: str
+    feature_names: tuple[str, ...]
+    standardized_features: tuple[float, ...]
+    coefficients: tuple[float, ...]
+    intercept: float
+
+    def __post_init__(self) -> None:
+        if (
+            self.action.kind != ActionKind.TEST or self.action.intervention is None
+            or self.key != self.action.intervention.value or self.cost != self.action.cost
+        ):
+            raise ValueError("Learned candidate must identify a supported test and its cost.")
+        if not (
+            len(self.feature_names) == len(self.standardized_features) == len(self.coefficients)
+            and 0 < len(self.feature_names) <= 32
+        ):
+            raise ValueError("Learned candidate feature dimensions disagree.")
+        numbers = (*self.standardized_features, *self.coefficients, self.intercept,
+                   self.predicted_utility, self.threshold, self.score)
+        if any(not math.isfinite(value) for value in numbers) or self.threshold < 0:
+            raise ValueError("Learned candidate values must be finite and threshold nonnegative.")
+        expected = self.intercept + math.fsum(
+            weight * value for weight, value in zip(self.coefficients, self.standardized_features, strict=True)
+        )
+        if not math.isclose(expected, self.predicted_utility, rel_tol=1e-10, abs_tol=1e-10):
+            raise ValueError("Learned prediction contradicts its recorded feature contributions.")
+        if self.score != round(self.predicted_utility / self.cost, 6):
+            raise ValueError("Learned score contradicts predicted utility/cost.")
+        if self.eligible != (not self.rejection_reasons):
+            raise ValueError("Learned eligibility contradicts rejection reasons.")
+        if self.eligible and self.predicted_utility <= self.threshold:
+            raise ValueError("Eligible learned candidate must exceed its abstention threshold.")
+        if len(self.model_sha256) != 64 or any(c not in "0123456789abcdef" for c in self.model_sha256):
+            raise ValueError("Invalid learned model fingerprint.")
+
+
+ScoredCandidate = CandidateScore | LearnedCandidateScore
+
+
+@dataclass(frozen=True)
 class DecisionRecord:
     id: str
     hypothesis_id: str
     evidence_ids: tuple[str, ...]
     remaining_budget: int
-    candidates: tuple[CandidateScore, ...]
+    candidates: tuple[ScoredCandidate, ...]
     chosen_key: str | None
     reason: str
 

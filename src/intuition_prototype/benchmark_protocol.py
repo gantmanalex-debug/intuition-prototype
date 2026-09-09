@@ -12,14 +12,14 @@ import subprocess
 from intuition_prototype.simulator import SimulatorConfig
 
 
-VERSION = "stage3-v2-portable"
+VERSION = "stage3-v3-baseline-refactor"
 REPEAT_SEEDS = (101, 202)
 POLICY_NAMES = ("inquiry.py", "navigator.py", "predictions.py", "records.py")
 STAGE2_HASHES = {
     "inquiry.py": "c91d1517637bad61bc4cc288735d43c292146d5d077dc8445d315b1343009989",
-    "navigator.py": "9f35ab2db35c9db04722b0faa8fde220a15e2214abaa89f3f3cbe9dd1a160046",
+    "navigator.py": "1d74c0220fba508f10b92c41a748fd74d7948e596228eb852224af8b01542c1c",
     "predictions.py": "f04637fe96ba28a00659031162029cb542a98ec67d9627496b04bdac885f39fc",
-    "records.py": "dd906a372a9e9a41b3340f3b563e62d4b6d30039a8e1a7694b5968d4588beec8",
+    "records.py": "3743a6437fefb4cdaf99bde5e78239b5c81345a325eebffb3c951b871d1c8e11",
 }
 SOURCE_NAMES = (
     "__init__.py", *POLICY_NAMES, "simulator.py", "storage.py",
@@ -126,6 +126,12 @@ PROTOCOL = {
         "for source identity and separately retains exact raw archive hashes. Policies, generator "
         "and scoring rules are unchanged. Revalidation of already inspected v1 cases is a rerun, "
         "not fresh held-out evidence."
+    ),
+    "baseline_refactor_revision": (
+        "v3 shares the unchanged heuristic inquiry loop with Stage 4 and extends typed records. "
+        "Its fixed source checkpoints differ from abdc78b; weights, predictions, simulator and "
+        "external scoring are unchanged. The original v1/v2 artifacts remain readable and intact. "
+        "New Stage 3 runs are historical regression, never fresh held-out evidence or Stage 4 training."
     ),
 }
 
@@ -237,7 +243,7 @@ def prepare(
         )},
         "configuration_counts": {split: len(entries) for split, entries in cases.items()},
         "policy_sha256": freeze["policy_sha256"],
-        "attempt_classification": "rerun" if rerun_of else "first_run",
+        "attempt_classification": "rerun" if rerun_of else "historical_regression",
         "rerun_of": rerun_of, "invalidation_reason": invalidation_reason,
     }
     write_json(directory / "manifest.json", manifest)
@@ -246,7 +252,7 @@ def prepare(
 
 def check_manifest(directory: Path) -> dict:
     manifest = read_json(directory / "manifest.json")
-    if manifest["version"] not in ("stage3-v1", VERSION):
+    if manifest["version"] not in ("stage3-v1", "stage3-v2-portable", VERSION):
         raise ValueError("Unknown benchmark version.")
     for name, expected in manifest["files"].items():
         if file_digest(directory / name) != expected:
@@ -268,12 +274,12 @@ def check_manifest(directory: Path) -> dict:
 def check_frozen(directory: Path) -> dict:
     manifest = check_manifest(directory)
     if manifest["version"] != VERSION:
-        raise ValueError("Legacy results are readable, but execution requires a new declared portable rerun.")
+        raise ValueError("Legacy results are readable, but execution requires a declared regression replay.")
     freeze = read_json(directory / "freeze.json")
     if source_fingerprints() != freeze["source_sha256"]:
         raise ValueError("Source fingerprint changed after preparation; invalidate and explicitly declare a rerun.")
     if {name: freeze["source_sha256"][name] for name in POLICY_NAMES} != STAGE2_HASHES:
-        raise ValueError("Frozen policy provenance is not the original Stage 2 policy.")
+        raise ValueError("Frozen policy provenance is not the recorded Stage 2 baseline refactor.")
     if platform.python_version() != freeze["python"]:
         raise ValueError("Python version differs from prepared benchmark.")
     return manifest

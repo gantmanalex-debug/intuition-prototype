@@ -6,16 +6,19 @@ import json
 from pathlib import Path
 
 from intuition_prototype.inquiry import run_inquiry
+from intuition_prototype.config import DEFAULT_MODEL_PATH
+from intuition_prototype.learned import load_model, run_learned
 from intuition_prototype.navigator import run_navigator
 from intuition_prototype.records import (
     Hypothesis, InterventionRecord, Observation, Prediction, Question, Result,
     AnswerRecord, DecisionRecord, FuseRecord,
+    LearnedCandidateScore,
 )
 from intuition_prototype.simulator import QueueSimulator, SCENARIOS
 from intuition_prototype.storage import SavedEpisode, load_episode, save_episode
 
 
-POLICIES = ("scripted", "heuristic")
+POLICIES = ("scripted", "heuristic", "learned")
 
 
 def render_trace(saved: SavedEpisode) -> str:
@@ -74,10 +77,23 @@ def render_trace(saved: SavedEpisode) -> str:
                 f"Remaining budget {record.remaining_budget}; chosen: {record.chosen_key or 'none'}. "
                 f"{record.reason} Hypothesis {record.hypothesis_id}; evidence {', '.join(record.evidence_ids)}.",
                 "",
+            ]
+            learned = any(isinstance(candidate, LearnedCandidateScore) for candidate in record.candidates)
+            rows.extend((
+                "| Candidate | Score | Predicted utility | Threshold | Cost | Eligibility |",
+                "| --- | ---: | ---: | ---: | ---: | --- |",
+            ) if learned else (
                 "| Candidate | Score | Discrimination | Relevance | Gap | Novelty | Redundancy | Cost | Eligibility |",
                 "| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |",
-            ]
+            ))
             for candidate in record.candidates:
+                if isinstance(candidate, LearnedCandidateScore):
+                    rows.append(
+                        f"| {candidate.key} | {candidate.score:.4f} | {candidate.predicted_utility:.4f} "
+                        f"| {candidate.threshold:.3f} | {candidate.cost} "
+                        f"| {'eligible' if candidate.eligible else '; '.join(candidate.rejection_reasons)} |"
+                    )
+                    continue
                 rows.append(
                     f"| {candidate.key} | {candidate.score:.3f} | {candidate.discrimination:.2f} "
                     f"| {candidate.anomaly_relevance:.2f} | {candidate.evidence_gap:.0f} "
@@ -88,6 +104,20 @@ def render_trace(saved: SavedEpisode) -> str:
                 f"\n- **{candidate.key}**: {candidate.question} {candidate.rationale}"
                 for candidate in record.candidates
             )
+            for candidate in record.candidates:
+                if isinstance(candidate, LearnedCandidateScore):
+                    contributions = ", ".join(
+                        f"{name}: {weight * value:+.4f}"
+                        for name, weight, value in zip(
+                            candidate.feature_names, candidate.coefficients,
+                            candidate.standardized_features, strict=True,
+                        )
+                    )
+                    rows.append(
+                        f"\n- Model `{candidate.model_sha256}` / {candidate.key}: "
+                        f"intercept {candidate.intercept:+.4f}; standardized feature contributions: "
+                        f"{contributions}."
+                    )
             text = "\n".join(rows)
         elif isinstance(record, FuseRecord):
             text = (
@@ -106,8 +136,8 @@ def render_trace(saved: SavedEpisode) -> str:
     lines.extend((
         "",
         "**Limitation:** a successful scripted trace does not validate the research hypothesis. "
-        "Nor does a successful heuristic trace. Scores are hand-designed estimates, not learned "
-        "intuition, calibrated probabilities, or causal truth.",
+        "Nor does a successful heuristic or learned trace. The learned selector is fitted only "
+        "to select predefined actions, not learned intuition, calibrated probability, or causal truth.",
     ))
     return "\n\n".join(lines)
 
@@ -115,16 +145,20 @@ def render_trace(saved: SavedEpisode) -> str:
 def run_stage1(
     database_path: Path, scenario: str, seed: int, budget: int,
     policy: str = "scripted", max_steps: int = 12,
+    model_path: Path = DEFAULT_MODEL_PATH,
 ) -> tuple[str, str]:
     if policy not in POLICIES:
         raise ValueError(f"Unknown policy: {policy!r}. Choose from {POLICIES}.")
     if policy == "scripted" and max_steps != 12:
-        raise ValueError("Custom step limits apply only to the heuristic policy.")
+        raise ValueError("Custom step limits apply only to navigator policies.")
+    model = load_model(model_path) if policy == "learned" else None
     simulator = QueueSimulator(scenario, seed)
-    episode = (
-        run_inquiry(simulator, budget) if policy == "scripted"
-        else run_navigator(simulator, budget, max_steps)
-    )
+    if model is not None:
+        episode = run_learned(simulator, model, budget, max_steps)
+    elif policy == "scripted":
+        episode = run_inquiry(simulator, budget)
+    else:
+        episode = run_navigator(simulator, budget, max_steps)
     episode_id = save_episode(database_path, scenario, seed, episode)
     return episode_id, render_trace(load_episode(database_path, episode_id))
 
@@ -138,8 +172,9 @@ def reset_stage1(scenario: str, seed: int) -> tuple[str, str]:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Evaluate scripted or evidence-based heuristic inquiry.")
+    parser = argparse.ArgumentParser(description="Evaluate scripted, heuristic, or fitted learned inquiry.")
     parser.add_argument("--policy", choices=POLICIES, default="scripted")
+    parser.add_argument("--model", type=Path, default=DEFAULT_MODEL_PATH)
     parser.add_argument("--max-steps", type=int, default=12)
     parser.add_argument("--scenario", choices=SCENARIOS, default="retry_amplification")
     parser.add_argument("--seed", type=int, default=7)
@@ -148,7 +183,7 @@ def main() -> None:
     parser.add_argument("--json", action="store_true")
     args = parser.parse_args()
     episode_id, trace = run_stage1(
-        args.database, args.scenario, args.seed, args.budget, args.policy, args.max_steps,
+        args.database, args.scenario, args.seed, args.budget, args.policy, args.max_steps, args.model,
     )
     print(
         json.dumps(asdict(load_episode(args.database, episode_id)), indent=2)

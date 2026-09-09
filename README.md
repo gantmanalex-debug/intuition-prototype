@@ -11,8 +11,10 @@ recognizes promising investigations, including opportunities revealed by
 unexpected results.
 
 The current prototype uses a reproducible service simulator, explicit hypotheses
-and evidence, persistent inquiry traces, a scripted baseline, and a transparent
-heuristic navigator with a bounded intelligence fuse. Frozen-policy comparative
+and evidence, persistent inquiry traces, a scripted baseline, a transparent
+heuristic navigator, and a small offline-fitted action selector with a bounded
+intelligence fuse. The learned component selects among predefined investigations;
+it does not discover new questions or tools. Frozen-policy comparative
 evaluation measures investigation usefulness and cost independently of the
 policies' own conclusions, within the simulator's declared mechanisms. This is
 research infrastructure, not a demonstration of AGI, consciousness, or learned
@@ -20,13 +22,17 @@ intuition, and it currently makes no LLM calls.
 
 ## Current status
 
-**Stage 2 is implemented:** a transparent evidence-based HEURISTIC navigator
-and intelligence fuse, alongside the preserved Stage 1 SCRIPTED baseline.
-Neither policy is learned intuition.
+**Stage 4 adds a small offline LEARNED action selector:** fitted ridge utility
+regressors select among the same three bounded interventions, alongside the
+preserved SCRIPTED default and transparent HEURISTIC navigator/intelligence fuse.
+None is learned intuition or an LLM. Stage 4 uses new development-only fitting
+and validation data and a separately declared, frozen-model test split.
+Its first frozen test found **lower utility than the heuristic despite lower
+investigation cost**; the model was not retuned after that result.
 It provides an importable Python package, standard-library SQLite storage,
 pytest tests, and a loopback-only Gradio health/demo and investigation interface.
 No GPU, paid provider, credentials, model downloads, or LLM API calls are needed.
-Successful scripted or heuristic traces do **not** validate the intuition research
+Successful scripted, heuristic, or learned traces do **not** validate the intuition research
 hypothesis. Stage 3 adds a frozen, configuration-level comparative evaluation
 within the same simulator, not a test of unknown mechanisms.
 
@@ -110,6 +116,7 @@ it is **not automatically loaded**, and no real `.env` or credentials are needed
 | --- | --- | --- |
 | `INTUITION_MODE` | `demo` | Only supported mode; other values fail explicitly. |
 | `INTUITION_DB_PATH` | `.runtime/intuition.sqlite3` | SQLite path, relative to the current working directory unless absolute. |
+| `INTUITION_MODEL_PATH` | `.runtime/stage4-v1/model.json` | Local fitted selector model for the UI; learned selection fails explicitly if missing or incompatible. |
 
 The environment panel initializes the SQLite schema and displays runtime versions, database
 location, and the result of a database query. The demo simply echoes input with
@@ -242,7 +249,7 @@ work is visible separately in queue growth. Replay is checked in the selected
 Python environment; bit-for-bit cross-version replay is not promised.
 SQLite retains run history until manually managed; there is no retention service.
 
-Learned intuition, learned action selection, fuse training, real remote LLM
+Stage 4 now implements limited learned action selection. Learned intuition, fuse training, real remote LLM
 integration, unrestricted real-world tools, and research validation remain deferred.
 
 ## Stage 2: heuristic navigator and intelligence fuse
@@ -385,8 +392,9 @@ exhaustion. This synthetic test checks control flow, not simulator or research v
 
 The heuristics were designed with this simulator in view. These costs do **not**
 establish general superiority, causal identification, learned intelligence, or
-research validation. There is no calibrated information-gain model, learned
-selector, independent CPU/DB diagnosis, or formal held-out benchmark. The original
+research validation. Stage 2 itself has no calibrated information-gain model,
+learned selector, independent CPU/DB diagnosis, or formal held-out benchmark;
+Stages 3 and 4 add evaluation and limited learning separately. The original
 simulator limitations remain.
 
 ## Stage 3: frozen configuration-holdout comparison
@@ -403,7 +411,7 @@ rules may be tuned after inspecting held-out outcomes.
 Inside the activated WSL environment:
 
 ```bash
-python -m intuition_prototype.benchmark prepare --output .runtime/stage3-replay --rerun-of published-stage3-v1 --invalidation-reason "Reproduce published results with portable fingerprints"
+python -m intuition_prototype.benchmark prepare --output .runtime/stage3-replay --rerun-of published-stage3-v2 --invalidation-reason "Historical regression after shared-loop refactor; not fresh evidence"
 python -m intuition_prototype.benchmark run --output .runtime/stage3-replay
 python -m intuition_prototype.benchmark report --output .runtime/stage3-replay
 python -m pytest -q tests/test_benchmark.py tests/test_navigator.py tests/test_stage1.py tests/test_smoke.py
@@ -596,7 +604,8 @@ Data readiness: development contains 16 configurations, 32 paired seed cases,
 usable for a small future learned-policy prototype, not enough to substantiate
 learning claims. Held-out configurations have now been inspected; retain their
 evaluation provenance and construct a new untouched configuration split for any
-later tuned/learned policy. No learned selector has been implemented.
+later tuned/learned policy. Stage 4 deliberately excludes **all 64** Stage 3
+configurations, including development, from its new training/validation/test sets.
 
 ### Publication portability correction and labeled replay
 
@@ -622,6 +631,251 @@ This replay is **not fresh held-out evidence**.
 - Publication validation: **123 tests passed**, including a line-ending portability
   regression test. The differing hash is a representation change, not policy tuning.
 
+### Stage 4 baseline compatibility
+
+`stage3-v3-baseline-refactor` records new source fingerprints for sharing the
+unchanged navigation loop and extending typed records. It does not change the
+heuristic weights, predictions, simulator, or external utility rule. Both v1 and
+v2 report archives remain readable and untouched. An explicit historical regression
+replayed all **128 paired cases / 256 complete serialized episodes** from v2:
+both baseline policies' traces, assessments, and initial observations matched
+exactly. This is regression evidence, never Stage 4 training or fresh testing.
+New Stage 3 runs are labeled historical regression; reproducing the original
+source checkpoint itself requires the published `abdc78b` checkout/archived sources.
+
+## Stage 4: offline learned candidate selection
+
+### What is actually learned
+
+Three ridge regressions predict independently defined **single-intervention
+utility**, one for each permitted intervention. They are actually fitted from
+development simulator observations and intervention outcomes, not hand-labeled
+heuristic rules. Fitting uses only the Python standard library; no downloaded
+model, GPU, provider, credentials, or API is involved.
+
+The actions/questions remain the predefined worker doubling, DB doubling, and
+new-retry suppression investigations. This is **selection among known candidates**,
+not question generation, mechanism discovery, general reasoning, or learned intuition.
+Scripted remains the default. Heuristic and learned policies share the same
+bounded ask/test/reframe/answer/stop loop, pre-action hypothesis predictions,
+same-state experiments, evidence-based reframing, and intelligence fuse.
+
+For each action the fit minimizes mean squared target error plus
+`alpha * sum(coefficients**2)`, with an unpenalized intercept. Training-only means
+and population standard deviations standardize ten telemetry features:
+
+1. Arrivals per tick.
+2. Unique completions / `max(1, arrivals)`, clipped to 0..4.
+3. Queue growth / arrival denominator, clipped to -4..8.
+4. Initial queue / arrival denominator, clipped to 0..20.
+5. New retries / arrival denominator, clipped to 0..4.
+6. Duplicate completions / `max(1, unique + duplicate completions)`.
+7. Mean completed-request latency / window ticks, clipped to 0..8; zero if absent.
+8. Explicit missing-latency indicator.
+9. Dropped attempts / arrival denominator, clipped to 0..4.
+10. `max(0, 1 - completion_fraction)`.
+
+A constant feature has scale 1. No scenario ID, regime, seed, hidden parameter,
+snapshot contents, or evaluator counterfactual is an inference feature.
+Training targets use exactly the independent Stage 3 utility rule above, not a
+policy's support label. Estimates are **not calibrated probabilities** and can be
+wrong or negative.
+
+Eligible candidates are ranked by `predicted_utility / test_cost`, rounded to six
+decimals, with lexical action-key ties. The predicted utility must strictly exceed
+the development-selected abstention threshold. Unsupported/already-tested actions
+are rejected; admission reserves test + reframe cost and test/reframe/terminal
+steps. The fuse considers all untried alternatives after contradiction/no-progress,
+including explicit low-value rejection reasons. Evidence updates eligibility and
+interpretations, **not fitted weights or other actions' numeric estimates**.
+Low estimated value produces an inconclusive abstention, not a proof of no cause.
+
+The trace records model SHA256, predictions, threshold, standardized features,
+coefficients, intercept, individual contributions, chosen/rejected alternatives,
+actual observations, and fuse decisions. SQLite roundtrip validates the learned
+score schema while preserving Stage 1/2 episodes and original demo entries.
+
+### Model use and reproducibility
+
+The model is a versioned JSON artifact with normalization, coefficients, selected
+hyperparameters, training/validation IDs, source provenance, and a content digest.
+Missing, corrupt, incompatible, or changed-preprocessing models fail explicitly;
+there is no silent fallback. A health-panel file-present flag only reports file
+existence; actual model validation occurs when learned selection is requested.
+
+Inside the activated WSL environment, prepare and train before selecting learned:
+
+```bash
+python -m intuition_prototype.stage4 prepare --directory .runtime/stage4-v1
+python -m intuition_prototype.stage4 train --directory .runtime/stage4-v1
+python -m intuition_prototype.stage1 --policy learned --model .runtime/stage4-v1/model.json --scenario retry_amplification --seed 7 --json
+python -m intuition_prototype.stage4 freeze --directory .runtime/stage4-v1
+python -m intuition_prototype.stage4 evaluate --directory .runtime/stage4-v1
+python -m intuition_prototype.stage4 report --directory .runtime/stage4-v1
+```
+
+Use a **new directory** for reproduction; existing artifacts are not overwritten.
+Re-executing the published split is a reproduction of inspected data, not another
+untouched test. No training or benchmark runs during UI startup. Set **Inquiry
+policy** to `learned` after training; the UI loads `INTUITION_MODEL_PATH` for each
+run. CLI `--model` is explicit and independent of that environment variable.
+
+Development-only model tests exercise actual fitting, deterministic replay,
+feature/provenance boundaries, missing/corrupt models, bounds, alternate-path fuse
+recovery, contribution validation, SQLite, and CLI. The test suite never executes
+the new untouched test partition.
+
+### Declared split, selection, and freeze
+
+Protocol `stage4-v1`, generator seed **20260909**, declares all configurations
+before fitting: **48 train, 16 validation, 48 test**, with seeds **101 and 202**
+paired across all three policies. There are eight sampling regimes, respectively
+6/2/6 configurations per regime. Worker supports are globally disjoint:
+train `{4,7,10,13}`, validation `{5,8,11,14}`, test `{2,3,6,9,12,15,16}`.
+Exact parameter fingerprints exclude all 64 original Stage 3 configurations.
+
+The declared generator broadens load/capacity variation and includes zero/low
+arrivals, healthy headroom, retries on/off, mixed bottlenecks and wide arrival
+ranges including 0..8. Initial DB capacity spans declared regime-specific bounds
+within 1..64, lock penalties within 0..0.25, and retry timeouts 1..1000.
+Regime tags are sampling metadata, not causes. **No simulator formula or reference
+utility was changed to help the learned policy.** The public generator reproduces
+training data without any private runtime files.
+
+Four ridge strengths `{0.01,0.1,1,10}` are fitted on the 96 training seed windows.
+The 16 combinations with thresholds `{0,0.02,0.05,0.1}` are compared on validation
+only. The declared order maximizes configuration-mean cost-adjusted utility,
+then utility, then minimizes cost, then prefers stronger ridge and a higher
+threshold. There is no refit on validation. Selected **alpha 0.1, threshold 0.1**:
+validation mean utility 0.153526, cost 2.5, cost-adjusted utility 0.030705.
+These are selection data, not test findings.
+
+Both an actual second full development run and unit-level reproduction produced
+byte-identical preparation, model, training, development-output, and selection-grid
+files. Timestamps and timings are sealed separately, outside model identity.
+Before the official test, the final model, preprocessing, every project executable
+source, scorer, protocol, partitions, and training outputs were frozen.
+Source identity normalizes CRLF to LF; exact raw archive bytes and inventory are
+also verified. Runtime data/credentials are excluded from live-source inventory.
+An exclusive start marker prevents silent overwrite/resume of failed attempts.
+
+The primary endpoint is configuration-mean learned-minus-heuristic test utility.
+Seeds are averaged within configuration; 2,000 deterministic, paired bootstrap
+resamples within regime provide descriptive 95% intervals. The secondary
+learned-minus-scripted comparison uses the same procedure. All policies receive
+the same agent-safe interface, snapshots, 30-tick windows, budget 10 and step cap 12.
+The reference remains the existing evaluator-only, best permitted **single-action**
+counterfactual, not a policy's support label or a unique-cause diagnosis.
+
+### First frozen test: negative utility result, lower cost
+
+One official attempt completed on **48 configurations / 96 paired seed cases /
+288 agent episodes**. No test outcome was inspected before model selection and
+freeze; there was no test-triggered retuning, source change, or rerun.
+
+| Policy | Mean utility | Mean regret | Mean cost | Cost-adjusted utility | Helpful supports | Abstentions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Scripted | 0.183276 | 0.031531 | 8.281250 | 0.027568 | 52 | 44 |
+| Heuristic | 0.214807 | 0.000000 | 4.500000 | 0.038479 | 52 | 44 |
+| Learned | 0.147435 | 0.067372 | 2.593750 | 0.029487 | 37 | 59 |
+
+- Learned minus heuristic utility: **-0.067372**, interval
+  **[-0.101448, -0.036232]**; 0 configuration wins, 40 ties, 8 losses.
+- Learned minus heuristic cost: **-1.906250**, interval
+  **[-2.437500, -1.375000]**. Cost-adjusted utility also fell by 0.008992,
+  interval [-0.014734, -0.004243].
+- Learned minus scripted utility: **-0.035841**, interval
+  **[-0.079313, 0.005014]**; 5 wins, 35 ties, 8 losses.
+  Cost fell by 5.687500; cost-adjusted utility rose by 0.001919 with interval
+  [-0.007178, 0.009782]. This does not establish a reliable advantage.
+
+The learned selector abstained despite available benefit in **15/96** seed cases:
+2 worker-pressure, 4 mixed-pressure, and 9 near-balance cases. That is **15/59
+(25.4%) of its abstentions**, or **15/52 (28.8%) of independently beneficial
+cases**. Both baselines missed none through abstention. All three policies had
+zero supported-but-unhelpful reports, zero no-benefit false positives among 44
+no-benefit cases, and zero budget/step violations. These zeros are not proof of
+robust correctness or calibrated confidence.
+
+Concrete failure: configuration `66d2b35a87a368f8c7cc`, seed 101. Baseline:
+30 completions, 198 arrivals, queue growth 168. The model estimated DB utility
+**0.158689**, workers **0.094610**, and retry suppression **0.007376**. It tested DB;
+the outcome was unchanged, so the fuse recorded contradiction/no-progress.
+Workers were affordable but rejected below threshold 0.1. The result was an
+inconclusive abstention at cost 4, although the evaluator measured worker utility
+**0.189394**. Scripted found that benefit at cost 4; heuristic recovered it at
+cost 7. A separately tagged mixed configuration with identical telemetry received
+the same predictions, demonstrating that evaluator regime labels did not drive selection.
+
+The learned policy had **zero test-set fuse switches/recoveries**: its value gate
+often rejected the remaining alternative. The heuristic had 37 switches and 14
+externally helpful episodes after a switch. Development-only synthetic tests
+verify that the shared learned loop can genuinely reframe and recover when an
+eligible alternative remains; that control-flow test is not evidence of observed
+test-set recovery. We leave this weakness intact rather than adjusting the threshold
+or inventing successful demonstrations after inspecting test results.
+
+### Diversity, computation, artifacts, and limitations
+
+Disjoint parameters are not disjoint behavior. Exact paired telemetry signatures
+number **32/48 train**, **13/16 validation**, and **34/48 test** configurations.
+Fourteen test configurations duplicate another test signature; **19 test
+configurations share an exact paired signature with development**. Coarse
+benefit/sign patterns number 8/5/7 across train/validation/test; **94/96 test
+windows** have a coarse pattern seen in development. Only one configuration has
+both repeats novel under that coarse definition. Novelty summaries are descriptive
+after-test diagnostics, not independently selected confirmatory subsets.
+
+Broader parameters therefore do not establish new-mechanism or robust behavioral
+generalization. Configuration-level intervals remain conditional on this
+hand-designed generator and contain correlated/duplicate behavior. The model has
+only ten features, 48 fitting configurations and 16 selection configurations.
+It cannot discover candidates, reason about unmodeled mechanisms, or update
+cross-action utility estimates after a contradiction. Completed-request latency
+is survivor-biased; retry suppression does not clear old backlog or establish
+throughput recovery. No LLM baseline exists because none is configured.
+
+Observed primary training computation: 4 ridge fits, 512 validation-policy
+episodes, 384 selected-model development-policy episodes; evaluator-only oracle
+cost 512 windows / 19,200 simulated ticks including warmup. Measured wall time was
+7.35 seconds total, including 0.08 seconds fitting and 0.72 seconds oracle work.
+The official test used 384 oracle windows / 14,400 ticks separately from agent
+cost; observed wall times were 0.69 seconds oracle, 1.36 seconds policy execution,
+and 8.13 seconds through result generation/validation. Timings are machine-specific,
+not a general performance benchmark; final read-only reload checks and training
+reproduction are additional computation.
+
+Persistent, gitignored artifacts are under `.runtime/stage4-v1/`:
+`preparation.json`, separate split files, `protocol.json`, `development.json`,
+`validation-grid.json`, `model.json`, training/runtime manifests, `freeze.json`,
+exact `archive/` copies, `test-raw.jsonl`, `report.json`, `report.md`, and the sealed
+evaluation manifest. The complete primary artifact set is about 44.7 MiB.
+The independent development reproduction is retained in
+`.runtime/stage4-training-reproduction/`; it has **no test execution**.
+
+- Preparation digest:
+  `d9d0858cda7bbffc265928ea740aa7488097fda71ead44e21e3e0e46949706d9`
+- Selected model digest:
+  `ea8ceb42894b03a1500b594855c4d45a9da5cba21f12d1cd5ca7993ac1e375fe`
+- Final freeze digest:
+  `3261eb9641b7334dee54924e526a75a773ae7f99388585bf9e937134b5d075fa`
+- Raw test file SHA256:
+  `bf059aa9e082eb9d3afca0471fc2875f9ec4895639b893e8ef683b5117c9d79b`
+
+Verification: **163 pytest tests passed**; actual train/evaluate/report CLI JSON,
+persisted report/Markdown reload, source/archive/model integrity, all three live
+Windows-browser policy callbacks, typed SQLite readback, reset, health, and offline
+echo were verified. The UI remains localhost-only with analytics disabled and no
+external theme stylesheets. The old inactive browser page needed replacement;
+no application workaround was introduced. Startup can be slow on the Windows-mounted
+virtual environment. The live learned budget-3 callback stopped at cost 1 with
+`budget_exhausted`; budget 10 completed the retry demonstration at cost 4.
+
+These inspected Stage 4 test cases are now evaluation history, not a new future
+test set. Future model improvements must use development data and another declared
+untouched evaluation split. The current result demonstrates working learning and
+evaluation infrastructure, **not a successful intuition research hypothesis**.
+
 ## Architecture boundary
 
 - `config.py`: explicit validated demo configuration.
@@ -630,8 +884,11 @@ This replay is **not fresh held-out evidence**.
   results, and episodes.
 - `simulator.py`: bounded queue dynamics and opaque snapshot/reset API.
 - `inquiry.py`: explicitly scripted, budgeted investigation policy.
-- `predictions.py`: shared declared prediction criteria for both policies.
-- `navigator.py`: evidence-based scoring, deterministic selection and intelligence fuse.
+- `predictions.py`: shared declared prediction criteria for all three policies.
+- `navigator.py`: heuristic scoring and shared bounded selection/intelligence-fuse loop.
+- `learned.py`: telemetry preprocessing, ridge fitting, strict model loading and learned scores.
+- `stage4_protocol.py`: new isolated configuration partitions and frozen experiment provenance.
+- `stage4.py`: development training/selection and three-policy test evaluation/reporting.
 - `benchmark_protocol.py`: declared parameter splits, frozen source/config fingerprints.
 - `benchmark.py`: independent counterfactual reference, paired evaluation and reports.
 - `storage.py`: original demo storage plus transactional typed episode persistence.
@@ -645,9 +902,11 @@ This replay is **not fresh held-out evidence**.
   bounds, legacy-schema migration, score validation, and preserved baseline behavior.
 - `tests/test_benchmark.py`: split/config bounds, external scoring, frozen provenance,
   development-only integration, integrity and report roundtrip.
+- `tests/test_learned.py`, `tests/test_stage4.py`: fitted-model behavior, data isolation,
+  model/experiment integrity, development-only lifecycle integration and persistence.
 
-Both policies are foundations for later research, not an implementation of the
-proposed learned controller.
+All three policies are bounded research infrastructure, not the proposed open-ended
+learned investigative controller. Candidate discovery and fuse training remain deferred.
 
 A future remote adapter must explicitly implement the protocol, extend mode
 validation and the factory, and define credentials, timeouts, error handling,
