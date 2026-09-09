@@ -35,6 +35,21 @@ No GPU, paid provider, credentials, model downloads, or LLM API calls are needed
 Successful scripted, heuristic, or learned traces do **not** validate the intuition research
 hypothesis. Stage 3 adds a frozen, configuration-level comparative evaluation
 within the same simulator, not a test of unknown mechanisms.
+A separate cumulative three-intervention benchmark now tests the depth hypothesis
+with explicitly named sequential adapters; it leaves the original policies and
+frozen Stage 4 model unchanged.
+A further isolated **dog-at-door history benchmark** tests learned next-question
+preferences after each question/answer. It is a finite synthetic pattern-learning
+toy, not sequential repair, a real-dog model, diagnosis, treatment guidance, or
+validated intuition.
+
+The current extension targets **context-first inquiry**, rather than object-only
+classification: clarify what the asker needs when it is unknown, narrow relevant
+interpretation families using evidence, then ask finer discriminating questions.
+The two illustrative interfaces are a dog-at-door question and a request to use a
+linked list. Asker context and desired means are not evidence about the underlying
+world or requirements. Both CLI demonstrations and the new frozen comparison are
+verified. Historical results below remain separate evidence.
 
 ## Latest findings and conclusions
 
@@ -58,6 +73,30 @@ policy before evaluating another untouched configuration split. Do not tune on
 these inspected test results. See [the detailed Stage 4 results](#first-frozen-test-negative-utility-result-lower-cost)
 and [limitations](#diversity-computation-artifacts-and-limitations) for uncertainty,
 failure traces, correlated behavior, and the full comparison.
+
+The [sequential extension](#sequential-benchmark-three-meaningful-interventions)
+also does not support a learned advantage: on certified three-intervention test
+cases, frozen learned transfer restored service in **0/10**, versus **8/10** for
+the heuristic adapter and **0/10** for scripted. These are remediation outcomes
+in a small, structurally selected sample, not general reasoning accuracy or durable
+recovery. Retrospective inspection of the frozen reference also finds a single
+fixed repair order meeting the window goal in **10/10**: this benchmark does not
+establish that adaptive reasoning is needed.
+
+The first frozen dog-history test also does not show a history-model advantage.
+The history-aware learner reached supported answers in **12/20** cases, versus
+**13/20** for its memoryless learned ablation, with the same **6/20** supported
+and latent-label-correct outcomes. It did clearly outperform the deliberately
+nonadaptive fixed order on supported resolution (12/20 versus 2/20), but this
+small known finite task does not establish general question learning.
+
+The newer [context-first comparison](#context-first-inquiry-asker-purpose-abstractions-then-details)
+implements asker clarification and explicit abstraction narrowing in both domains.
+History-aware and memoryless learned policies **tie at 180/228 scoped resolutions
+and 2.509 questions on average**. The learner's actual history-dependent branches
+work, but this experiment does **not** show a performance advantage from the extra
+history. Twelve resolved exception cases have no scorable modeled truth; this is
+not a claim of perfect accuracy or reliable out-of-model detection.
 
 ## Selected platform
 
@@ -899,6 +938,890 @@ test set. Future model improvements must use development data and another declar
 untouched evaluation split. The current result demonstrates working learning and
 evaluation infrastructure, **not a successful intuition research hypothesis**.
 
+## Sequential benchmark: three meaningful interventions
+
+The expectation that learned selection might fare better when a solution is more
+than one investigation away is a **hypothesis**, not an explanation that removes
+the Stage 4 failure. This separate benchmark tests operational remediation with
+cumulative effects. It does **not** measure how many reasoning steps are required
+to guess or justify a diagnosis.
+
+### Task and rigorous depth criterion
+
+The original simulator formulas and the Stage 3/4 policies, learned model, and
+saved evidence are unchanged. A new wrapper lets the same worker/DB/retry
+interventions **remain applied**. The first observation follows the usual 30-tick
+warmup and a 30-tick measurement. Each subsequent intervention advances another
+30 ticks and returns the next window's telemetry. Queue contents, unfinished work,
+resource settings, and arrival RNG advance rather than resetting between tests.
+
+External success is a public finite-window service objective: positive arrivals,
+unique completions **at least arrivals**, non-growing queue, and no dropped
+attempts. There is no action-count requirement in this predicate. It means the
+service meets this window's load; it does not mean all old backlog is cleared,
+the cause is identified, or permanent stability is proven.
+The task deadline is three 30-tick action windows after the initial measurement.
+Success is checked after every move, not only at the deadline.
+
+**SLO and persistence precision:** the pre-run protocol and implementation defined
+success using aggregate metrics in **one 30-tick window**, not a sustained
+multi-window condition or an every-tick SLO. No confirmation windows, latency SLO,
+or subsequent relapse test were specified or measured. The saved
+`service_restored`/`success` labels and "restored service" wording below mean only
+**this window's goal was met**. A stochastic completion/arrival fluctuation can
+meet that goal; paired seeds do not establish longitudinal persistence. This
+limitation is explicit here following feedback received after the run, without
+retrospectively changing its frozen goal. A durable-recovery experiment would need
+a separately preregistered persistence criterion and new evaluation evidence.
+
+An evaluator-only exhaustive reference enumerates **all 52 legal prefixes**
+of depth 0..3: each of the three interventions at most once, plus a repeatable
+30-tick observe/wait move. A deep case is eligible only when **both seeds** have
+minimum success depth exactly 3 and **every successful path uses three distinct
+interventions**, never a wait substitution. Thus a one/two-repair solution, passive
+recovery, or merely consuming three measurement windows cannot satisfy eligibility.
+This is a lower bound within the declared action durations and horizon, not a
+mathematical bound on cognition, arbitrary tools, or unbounded waiting.
+In particular, failure of all waits within the remaining 90-tick horizon does
+**not** prove that waiting longer or forever could never help. Repairs and waits
+each consume one of the three available 30-tick moves; shorter-duration actions,
+repeated repairs, extra moves, and other tools are outside the certificate.
+
+Waiting is legal and included in the stronger reference, but the inherited
+selectors do not estimate or select waiting. The three-intervention bound limits
+all policies equally; it is not a minimum-step gate. A shallow control can and
+does terminate after its first successful intervention. Failed or unhelpful
+interventions remain applied and consume their full cost.
+
+### Separately named adapters, not silently upgraded planners
+
+The original default scenario UI remains the same-state inquiry interface.
+Use the separate sequential CLI/report below rather than interpreting its UI
+trace as a cumulative experiment.
+
+- `scripted-sequential-v1` is the **non-adaptive all-repairs reference**: workers,
+  retry suppression, then DB capacity in fixed order, with early goal/budget stops.
+  Its next repair does not depend on intermediate telemetry.
+- `heuristic-sequential-v1` uses the unchanged heuristic formula on the latest
+  telemetry and remaining legal interventions.
+- `learned-transfer-sequential-v1` uses the frozen Stage 4 coefficients,
+  training-only normalization, and strict utility threshold 0.1 on the latest
+  telemetry. It is **one-step-target transfer**, not a trained sequential planner.
+
+All share one explicit sequential loop and the same initial evidence, service
+goal, depth and budget. Initial measurement costs 1; each intervention costs 2
+plus 1 evidence-update unit, so budget 10 permits three actual interventions.
+Reference waits cost 1. These are synthetic action units, not money or CPU time.
+The reference utility is `min(1, completions/arrivals) - max(0, growth)/arrivals -
+drops/arrivals`, using denominator `max(1, arrivals)`. It measures final service
+performance, **not the Stage 4 single-intervention utility**; scores across the
+two benchmarks are not directly comparable.
+
+Existing hypothesis prediction criteria remain separately recorded before each
+move. A prediction match/local improvement does not imply the service objective
+is met. Mismatch, no utility progress, or local-only benefit prompts assessment
+of unused alternatives. The fuse switches only when an eligible action remains;
+it can still stop prematurely, including through the unchanged learned threshold.
+No policy receives reference paths, configuration labels, or hidden parameters.
+Consecutive observation windows are **not same-state causal contrasts**.
+
+### Declared construction and matched shallow controls
+
+`sequential-benchmark-v2` declares 80 development and 160 untouched-test parent
+configurations, each with seeds **307 and 409**, before test outcomes. Worker
+supports are disjoint: development `{4,6,8,10}`, test `{3,5,7,9,11,12}`. Public
+configuration fingerprints exclude every original Stage 3 and Stage 4 configuration.
+Declared arrival ranges, DB/lock ranges and timeouts use existing mechanisms only.
+
+An initial v1 declaration found three eligible deep cases and zero shallow cases
+in development, before any policy or test-reference execution. The retained v2
+declaration adds a paired control to **every** parent: DB capacity is already
+doubled and retries are disabled, with remaining parameters and seeds unchanged.
+All original parent configurations are preserved. A control enters the shallow
+cohort only if its parent qualifies deep and both control seeds have minimum
+success depth 1. Already-restored and unsolved controls are explicitly excluded.
+
+All structural reference outcomes and exclusions are retained before any policy
+run. Every eligible case is compared, not only favorable outcomes. Both seeds,
+all counterfactual paths, and the paired control belong to one parent statistical
+unit. The same budget, dynamics and objective apply to both cohorts, but initial
+partial remediation changes telemetry and bottlenecks: **depth is not causally
+isolated**. Sparse structural eligibility also limits representativeness.
+There is no sequential-target fitting, model selection, or test-set tuning.
+
+Inside the activated WSL environment:
+
+```bash
+python -m intuition_prototype.sequential_benchmark prepare --directory .runtime/sequential-v2 --model .runtime/stage4-v1/model.json
+python -m intuition_prototype.sequential_benchmark run --directory .runtime/sequential-v2 --split development
+python -m intuition_prototype.sequential_benchmark run --directory .runtime/sequential-v2 --split test
+python -m intuition_prototype.sequential_benchmark report --directory .runtime/sequential-v2 --split test
+python -m pytest -q tests/test_sequential.py tests/test_sequential_benchmark.py
+```
+
+Preparation requires a new directory and copies the exact frozen transfer model.
+Recreate that model from the Stage 4 source checkpoint `88a7de2` and its documented
+training commands if necessary; changing its training-source inventory produces
+a different model provenance and is not the declared frozen-transfer experiment.
+Executable sources, model, protocol, partitions and raw archive bytes are checked
+before and after execution. Each split is one-shot; a failed or inspected test
+must not be silently overwritten and presented as fresh evidence.
+
+### Verified results: deeper tasks did not rescue frozen learned selection
+
+The official frozen test examined **160 parent configurations plus 160 paired
+controls**, each at two seeds. All **640 configuration-seed references** were
+exhausted and their structural eligibility persisted **before any policy was run**.
+Only **5/160 parents (3.125%)** satisfied the strict three-distinct-intervention
+criterion at both seeds. Of those five, two had qualifying one-step controls;
+three controls were already restored initially and were excluded from the
+one-step cohort. The 155 other parents and all control exclusions remain in the
+reference/eligibility artifacts. No case was selected by policy success.
+
+The 155 excluded parents comprise 117 with neither seed solving within the
+declared horizon, 21 already meeting the goal at both seeds, six with depth 3 at
+both seeds but a successful wait-substitution path, and 11 other mixed-depth or
+shorter-path pairs. All 155 corresponding controls are excluded regardless of
+their own performance; a further three controls fail the both-seed depth-1 rule
+because both seeds already meet the goal. These are reference-based exclusions,
+not policy failures used to choose cases.
+
+Shortest successful depths for every included deep parent and its paired control
+are shown separately by seed. Depth 0 means the initial window already met the
+goal; it does not mean permanent health.
+
+| Parent configuration | Deep seed 307 | Deep seed 409 | Control seed 307 | Control seed 409 | Control inclusion |
+| --- | ---: | ---: | ---: | ---: | --- |
+| `15169e1deb0dfcc4f073` | 3 | 3 | 0 | 0 | Excluded: initially meets goal |
+| `3080e16887b90bb987b9` | 3 | 3 | 0 | 0 | Excluded: initially meets goal |
+| `41116140a9181655a4f6` | 3 | 3 | 1 | 1 | Included |
+| `4c3adbe20432c620cd8c` | 3 | 3 | 1 | 1 | Included |
+| `b1969ef09ab74eede376` | 3 | 3 | 0 | 0 | Excluded: initially meets goal |
+
+The stored `test-eligibility.jsonl` records minimum depth, strict-three status,
+successful paths, and inclusion/exclusion for **every configuration at each seed**;
+`test-references.jsonl` retains all endpoints. A null depth means no success within
+this finite search, not impossibility at longer horizons. Inclusion requires both
+seeds independently satisfying the rule; a favorable seed cannot qualify a parent.
+
+Thus there are **five deep parent units / ten seed cases**, **two matched shallow
+parent units / four seed cases**, and **42 policy episodes**, not hundreds of
+independent performance samples. Separately, development had three deep parents
+and two matched shallow controls: deep successes were scripted 0/6, heuristic
+4/6, learned 0/6; all three achieved 4/4 on its shallow controls. No adapter,
+threshold, model, scoring rule, or source changed after the final freeze or in
+response to either split's policy results.
+
+| Test cohort | Sequential adapter | Restored service | Mean final utility | Mean cost | Actual intervention depth |
+| --- | --- | ---: | ---: | ---: | --- |
+| Three-step | Scripted | 0/10 | 0.636723 | 10 | 3 in all cases |
+| Three-step | Heuristic | 8/10 | 0.959225 | 10 | 3 in all cases |
+| Three-step | Frozen learned transfer | 0/10 | 0.299082 | 7 | 2 in all cases |
+| Matched one-step | Scripted | 4/4 | 1.000000 | 4 | 1 in all cases |
+| Matched one-step | Heuristic | 4/4 | 1.000000 | 4 | 1 in all cases |
+| Matched one-step | Frozen learned transfer | 2/4 | 0.926067 | 2.5 | 0 in two cases, 1 in two |
+
+The learned adapter stopped for `no_eligible_intervention` after two tests in
+all ten deep cases, despite having three cost units left. **Eight of those ten
+stops still had a successful affordable continuation from their actual current
+state**. The other two had already taken an order that could not finish within
+the deadline. Scripted consumed all three interventions without restoring service;
+heuristic exhausted the deadline in two cases. All had zero budget violations.
+
+The shared goal-aware fuse switched to another untried action 20 times for
+scripted, 20 for heuristic, and 10 for learned in the deep cohort. Service was
+restored after a switch in 0, 8, and 0 episodes, respectively. These counts belong
+to the **new shared adapters**, not the old Stage 4 fuse evaluation. Scripted had
+19 local prediction matches without terminal service recovery; heuristic had 6
+and learned 4. This directly demonstrates why local benefit is not the new goal.
+
+### Concrete externally certified three-step path
+
+For test parent `41116140a9181655a4f6`, seed 307:
+
+| Cumulative path | Unique completions / arrivals | Queue growth | New retries | Goal met |
+| --- | ---: | ---: | ---: | --- |
+| Initial observation | 62 / 170 | 351 | 346 | No |
+| Disable retries | 51 / 179 | 14 | 0 | No |
+| Then double DB capacity | 56 / 177 | 12 | 0 | No |
+| Then double workers | 186 / 181 | -149 | 0 | Yes |
+
+Each row is a new window with persistent state. Every legal prefix of length
+0, 1, or 2 fails, and no three-move path substituting a wait succeeds. The middle
+resource change is an enabling intervention, not a cosmetic reframe: cumulative
+capacity and retained duplicate backlog determine the later worker intervention's
+effect. Paths, all endpoint telemetry, and the certificate are preserved in
+`test-references.jsonl`.
+
+The learned adapter followed the first two interventions, then estimated worker
+utility **-0.223422**, below its frozen threshold **0.1**, and stopped at cost 7.
+The independently measured third intervention would restore service at cost 10.
+This exposes the mismatch between the **old one-step utility target** and a
+cumulative resource configuration; it does not establish that a differently
+trained sequential selector would necessarily succeed.
+
+### Order sensitivity does not establish adaptive reasoning necessity
+
+With exactly three permitted once-only repairs, "try all repairs" is an obvious
+non-adaptive strategy. The existing scripted adapter is that reference in one
+predeclared order, not a planner. Three necessary physical repairs do **not**
+establish that three adaptive reasoning steps or information-dependent choices
+are necessary.
+
+The exhaustive reference already contains all six fixed orders, so order
+sensitivity can be characterized without running another policy or simulator.
+The following is **retrospective descriptive analysis of stored reference
+outcomes**, not a new preregistered policy comparison or an independently selected
+winning strategy. Let W = double workers, R = disable retries, D = double DB.
+All orders cost 10 on the ten included deep seed cases:
+
+| Non-adaptive repair order | Window goals met |
+| --- | ---: |
+| W, R, D (the evaluated scripted reference) | 0/10 |
+| W, D, R | 0/10 |
+| R, W, D | 10/10 |
+| R, D, W | 8/10 |
+| D, W, R | 0/10 |
+| D, R, W | 0/10 |
+
+Parent `3080e16887b90bb987b9` requires R,W,D at both seeds; the other four included
+parents permit either retry-first order. The heuristic's two failures used R,D,W
+on that parent. Thus order matters under the fixed deadline, but **one fixed order
+works across all included cases**. The heuristic's 8/10 versus scripted's 0/10
+cannot by itself demonstrate an advantage from planning, adaptation, or intuition.
+No adapter was changed to the retrospectively successful order, and no reference
+path was exposed to policy inference.
+
+### What can and cannot be concluded
+
+Across five parent units, learned-minus-heuristic success was **-0.8**, with a
+descriptive paired-bootstrap 95% interval **[-1.0, -0.4]**. The utility difference
+was **-0.660143**, interval [-0.758633, -0.549812]. Against scripted, success tied
+at zero but learned utility was **0.337641 lower**; its three-unit cost saving
+came with worse final remediation progress.
+
+On the two matched parent pairs, the deep-minus-shallow change in the
+learned-minus-heuristic success gap was **-0.5**, interval [-1, 0]. Against scripted
+it was **+0.5**, interval [0, 1], because scripted also failed on deep tasks,
+**not because learned transfer succeeded there**. Both seeds and both cohorts
+stay together in parent-unit resampling. With only two matched parents, these
+intervals are highly discrete and provide no robust causal depth estimate.
+
+**Conclusion:** this implemented three-step test does not support the expectation
+that the existing frozen learned selector becomes better simply because the
+solution is farther away. It reveals underexploration/target-transfer limitations,
+while the heuristic adapter succeeds on most of these selected cases. It does
+not disprove the broader hypothesis for a future sequential-target learner.
+The controls change initial remediation state as well as depth; structural
+filtering is selective; the horizon is finite; all mechanisms remain familiar.
+Among all 640 test references, there are only 372 distinct full-reference telemetry
+signatures and 286 distinct initial observations, so unique parameter IDs also
+overstate behavioral diversity. These are not independent new mechanisms.
+
+Possible future work remains **proposed, not implemented**: use development-only
+data to investigate sequential utility targets, underexploration, or calibrated
+abstention, then freeze any changes before another untouched test. Do not tune on
+this now-inspected split or reinterpret the original Stage 4 result as explained away.
+
+### Reproducibility and verification
+
+**239 pytest tests passed**, covering development-only exhaustive lower bounds,
+positive three-step paths, rejection of shallow/wait solutions, meaningful state
+transitions, pre-action evidence references, budget/capability/snapshot boundaries,
+frozen model/provenance/archive checks, full stored-trace replay, matched statistics,
+CLI/report readback, and all existing regressions. Every one of the original 17
+Stage 4 executable/configuration source identities is unchanged; only three new
+executable modules implement the separate task. Existing Stage 3/4 artifacts and
+the source/model contents are preserved. Their old live-inventory execution check
+correctly notices new modules; historical read-only artifact verification remains valid.
+
+The official sequential preparation, development run, test run, and report CLI
+were exercised. Report reload validates original archived code, model, all 52-node
+reference trees, complete decision traces, independent scores, and raw/Markdown
+roundtrip without advancing a simulator. There was one official test attempt,
+no post-test source changes, and no training. The original local UI is unchanged;
+this task is intentionally accessed through its own CLI/report.
+
+Artifacts under `.runtime/sequential-v2/` include frozen source/model/protocol
+archives, separate parent/control manifests, per-split exhaustive references and
+eligibility, policy traces, reports, and sealed start/reference-complete/completion
+markers. The set is about **21.7 MiB / 52 files**. Earlier development declarations
+are retained in `.runtime/sequential-declaration-v1/` and
+`.runtime/sequential-declaration-v2/`.
+
+- Sequential freeze digest:
+  `ac4dd4c8e0f2b29c68a91857c6200a41fcd9703754c5b243a70dc457b783a8f4`
+- Frozen transfer model digest (unchanged from Stage 4):
+  `ea8ceb42894b03a1500b594855c4d45a9da5cba21f12d1cd5ca7993ac1e375fe`
+
+Test reference computation used **33,280 trajectories / 151,040 measurement
+windows including warmup** (4,531,200 simulated ticks), taking about 66.1 seconds
+on this machine. Policy execution took about 0.08 seconds and 312 total synthetic
+action-cost units across 42 episodes; validation/reload and development computation
+are additional. Oracle cost is explicitly excluded from policy costs. This is a
+small local simulation benchmark, not a runtime-speed claim.
+
+## Historical four-label question-learning baseline
+
+This benchmark is conceptually separate from the service remediation work above.
+After every actual **question/answer**, a policy may select a different next
+question using the full prior history. Nothing is physically repaired. The bounded
+story has four illustrative hypotheses: `wants_outside`, `returned_and_resting`,
+`waiting_for_person`, and `possible_discomfort`. They are synthetic labels, not a
+model of real animal behavior or a medical/veterinary diagnosis. The task offers
+six fixed binary observation questions and a four-question budget.
+This completed experiment predates the clarification that broad abstraction
+families should be narrowed before finer interpretations. It has four leaf labels,
+not an explicit group/leaf ontology, and **does not satisfy that refined goal**.
+Its frozen results are retained rather than silently reinterpreted as evidence
+for abstraction narrowing.
+
+Every episode begins with exactly the same ambiguous observation. A policy-facing
+API returns only that opening, already observed question/answer pairs, the explicit
+posterior, remaining budget, and legal unasked questions. It does not return the
+hidden sampled label, complete answer vector, future answers, generator parameters,
+or reference paths. Repeats are illegal. The evaluator retains the full answer
+vector solely to answer lawful questions and certify reference depth.
+
+### Public evidence model and actual learned component
+
+The finite public likelihood gives positive mass to all 64 six-answer patterns
+under every hypothesis. Declared pair factors make the evidence naturally
+interactive: for example, outdoor orientation plus response to an outside cue is
+not treated as the product of two independent observations. After each answer,
+exact marginal Bayesian updating over that table produces the displayed belief.
+This update and the evidence-support rule are deterministic and **not learned**.
+An answer is emitted only when top posterior is at least 0.78 and its margin over
+second place is at least 0.28; otherwise the episode asks again or explicitly
+abstains. Here **"supported" means crossing these working-model thresholds**, not
+independent confirmation of the explanation. Every hypothesis assigns positive
+probability to every full answer pattern, so even all six answers cannot logically
+eliminate every competing hypothesis.
+
+**Calibration limitation identified during review:** the benchmark partitions
+uniformly shuffled full answer patterns, then draws a latent label conditional
+on each full pattern. This is not sampling patterns according to the public
+likelihood's own marginal distribution. Consequently the public model's posterior
+given a *partial* history need not equal the benchmark generator's conditional
+label probability. A displayed value of 0.78 is **not a validated 78% chance of
+being right**, nor a probability about a real dog. Sampling and thresholds were
+frozen before the run; they were not corrected or tuned after seeing its results.
+Model-threshold compliance and actual sampled-label correctness are reported
+separately. The experiment does not establish calibrated confidence.
+
+The modest standard-library learner is real but narrow. Development-only
+trajectory examples label every next question lying on an evaluator-certified
+shortest path to eventual evidence-supported resolution. Add-one-smoothed
+per-question positive rates are fitted over bias/depth, question-answer, and
+answer-pair features. Ranking uses the complete observed history; model weights
+never alter the Bayesian evidence update. A separately fitted memoryless ablation
+uses only the latest answer. Features absent from fitting cause an explicitly
+labeled unsupported-history abstention rather than a confident fallback.
+`information_gain` is a labeled **nonlearned** public-model entropy policy, not
+called intuition. `fixed_order` always asks the same questions.
+
+Concrete reference branch checks demonstrate available discriminating questions:
+
+- With the identical opening, asking `outside_orientation` first and receiving
+  **yes** on pattern `101111` makes `outside_cue` the sole shortest-path next
+  question; receiving **no** on pattern `000110` makes `comfortable_settle` the
+  sole useful next question.
+- With latest evidence fixed at `recent_return=no`, history
+  `[outside_orientation=yes, recent_return=no]` requires `outside_cue`, while
+  `[outside_cue=yes, recent_return=no]` requires `outside_orientation`. A
+  latest-answer-only representation cannot distinguish these two states.
+
+These are exhaustive-reference facts for fixed synthetic patterns, not fabricated
+free-form reasoning or evidence that the learned ranker made those choices. In
+fact, its autonomous first question is `outside_orientation`, and it next chooses
+`comfortable_settle` after **either** first answer. That first learned decision
+does not branch as the oracle example does.
+
+The frozen learner **does** demonstrably use earlier answers at the next step:
+in stored development trajectories, the same latest `comfortable_settle=no`,
+same two asked question IDs, same remaining budget, and same legal next questions
+lead to different choices:
+
+| Earlier answer | Latest answer | Actual learned next question |
+| --- | --- | --- |
+| `outside_orientation=no` | `comfortable_settle=no` | `discomfort_indicator` |
+| `outside_orientation=yes` | `comfortable_settle=no` | `outside_cue` |
+
+Both observed branches occur in eleven development episodes. Thus history
+conditioning is implemented, but it does not guarantee that every interaction
+changes the next question or that every learned choice is optimal. The
+memoryless **ranking** ablation drops earlier answers but still knows asked
+question IDs/budget and uses the shared full-history evidence/stop rule; it is
+not an agent with no memory anywhere.
+
+Two concrete **training-split demonstrations**, not selected evaluation successes,
+also have useful learned choices under the hindsight reference:
+
+- Pattern `011100`: outdoor orientation **no**, comfortable settling **no**,
+  discomfort indicator **no**, person departure **yes**; the model-threshold
+  answer is `waiting_for_person`. Its third question is one of two optimal ties.
+- Pattern `101101`: outdoor orientation **yes**, comfortable settling **no**,
+  outside cue **yes**; the model-threshold answer is `wants_outside`.
+  Its third question is the unique optimal continuation.
+
+These demonstrate actual branching after the same latest answer, not a claim that
+every displayed sequence is shortest from the opening or every answer is correct.
+
+Each trace records the actual question text, answer, prior,
+posterior, per-hypothesis increase/decrease interpretation, learned scores or
+nonlearned policy label, and legal set. The separately marked
+`reference_optimal_ties` annotations are evaluator-only hindsight, not information
+available to the learner or its explanation for choosing a question. Scores are
+fitted preference statistics, not calibrated probabilities of eventual success.
+
+### Preregistration, split, depth, and first frozen result
+
+Protocol `dog-history-v1`, generator seed **2026090901**, assigned disjoint complete
+answer patterns to **28 training / 12 validation / 20 untouched test** episodes
+before fitting. Exact complete-pattern overlap is zero. The opening, hypotheses,
+questions, likelihood mechanism, feature schema, and some partial histories
+intentionally overlap; this is finite-task compositional pattern holdout, not
+new-domain or new-mechanism generalization. Validation is report-only: there are
+no selected hyperparameters and no refit.
+
+The fit uses **1,747 derived trajectory examples from 28 training patterns**,
+not 1,747 independent episodes. Counting all nonempty unordered observed
+question/answer subsets of sizes 1..3, there are 225 distinct training subsets,
+178 validation subsets, and 230 test subsets; **223/230 test subsets already occur
+in training**. This count covers possible evidence subsets, not only histories
+visited by a policy. Full-pattern disjointness therefore coexists with substantial
+structural overlap. The history learner pools all observed answers and pairs;
+the static story does not require modeling temporal changes in answers.
+
+An evaluator-only search checks all **517 legal distinct-question prefixes** of
+depth 0..4 for each episode. Minimum depth is the first prefix satisfying the
+declared evidence rule; it does not count steps or forbid early success and does
+not claim guessing is impossible. On untouched test, minimum depth was 2 for 15
+episodes and 4 for 4; one could not resolve within budget. Thus four cases have a
+direct certificate requiring at least three distinct informative questions.
+This is a certificate of **working-model threshold depth under the four-question
+API**, not logical identification of the hidden label, a worst-case optimal
+adaptive decision tree, or inability to guess correctly. The episode-specific
+reference knows future answers; all equally short next questions are accepted
+as ties in the secondary agreement metric. No test episode is filtered out:
+short, deep, and unresolved cases all contribute to the main comparison.
+
+One official test attempt ran only after model, preprocessing, generator,
+evaluator, protocol, split files, environment, and exact/normalized live source
+identities were frozen. No outcome-selected inclusion, retuning, or rerun occurred:
+
+| Policy | Supported | Correct supported | Mean questions | Abstain | Unsupported confidence | Legal | Optimal-tie agreement |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed order | 0.100 | 0.100 | 4.000 | 0.900 | 0.000 | 1.000 | 0.456 |
+| Memoryless learned | 0.650 | 0.300 | 3.000 | 0.350 | 0.000 | 1.000 | 0.771 |
+| History learned | 0.600 | 0.300 | 3.350 | 0.400 | 0.000 | 1.000 | 0.706 |
+| Information gain | 0.400 | 0.250 | 3.400 | 0.600 | 0.000 | 1.000 | 0.667 |
+
+The fixed order often spent all four questions without reaching support, so this
+task contains branches where nonadaptivity wastes the budget. However, the
+history-aware fit did **not** beat the memoryless ablation: it resolved one fewer
+case, had the same correct-supported rate, cost 0.35 more questions, and had lower
+secondary optimal-tie agreement. This honest negative comparison remains frozen.
+Twenty test episodes are too few for broad conclusions, and reference agreement
+uses future answers unavailable to policies, so it is secondary rather than the
+optimization claim.
+
+In counts, the history learner emitted 12 threshold-qualified answers, of which
+**six were correct and six wrong**, and abstained eight times. Memoryless emitted
+13 (six correct, seven wrong); information gain emitted eight (five correct,
+three wrong); fixed order emitted two (both correct). **Zero unsupported
+confidence is only compliance with the programmed threshold**, not zero wrong
+confident answers, calibrated uncertainty, or independent truth verification.
+Among emitted answers, history's measured correctness was 50%, not at least 78%.
+
+Within the four certified depth-4 test cases, history and information gain each
+answered one correctly and abstained on three; fixed and memoryless abstained on
+all four. All spent four questions on each such case. This small subgroup is
+descriptive, not evidence that the history learner is generally superior on
+deeper tasks. Paired on all twenty episodes, history versus memoryless has
+threshold-resolution wins/ties/losses **1/17/2**, and correctness wins/ties/losses
+**1/18/1**. The first frozen comparison supports neither an overall history-model
+advantage nor validation of learned intuition.
+
+Run the isolated CLI inside WSL:
+
+```bash
+python -m intuition_prototype.dog_history_benchmark prepare .runtime/dog-history-v1
+python -m intuition_prototype.dog_history_benchmark train .runtime/dog-history-v1
+python -m intuition_prototype.dog_history_benchmark evaluate .runtime/dog-history-v1
+python -m intuition_prototype.dog_history_benchmark report .runtime/dog-history-v1
+python -m intuition_prototype.dog_history_benchmark demo .runtime/dog-history-v1 --pattern 011100 --policy learned_history
+python -m intuition_prototype.dog_history_benchmark demo .runtime/dog-history-v1 --pattern 101101 --policy learned_history
+python -m intuition_prototype.dog_history_benchmark continue .runtime/dog-history-v1 --observed comfortable_settle=yes
+```
+
+Use a new directory to reproduce: the official directory is single-use. Persisted
+artifacts include split/protocol/preparation files, archived source, both strict
+JSON models, development and raw test traces, official start/freeze/evaluation
+seals, and replayed Markdown. Identifiers:
+
+Both frozen model documents were independently reproduced exactly, using the
+original archived code, the original 28 training patterns and original provenance.
+That read-only development fit did not select parameters, write replacement
+models, or execute the official test again.
+
+`continue` accepts an explicitly **manually supplied observation history** and
+shows the frozen model's next-question preference. For the starter
+`comfortable_settle=no`, it chooses `outside_orientation`; for
+`comfortable_settle=yes`, it chooses `recent_return`. This is a continuation demo,
+not a claim that the autonomous model chose that starter or a new benchmark result.
+Report/demo commands send interpretation warnings to stderr while preserving
+machine-readable stdout.
+
+- History model: `9240127f45bf68abcd2d3650a553faeaaae70712c0b2dbe4b79251d20dade21c`
+- Memoryless model: `5cfb729b02cc09ab7bb279942d825e5b4d43fecd505d50b12302929eaa834231`
+- Official freeze: `e2aa234e89314bf8a5a89a84ccc80939e702b398ff81872c98edd87aaf56b086`
+- Raw test traces:
+  `3edbecaa2fc32107431e7f15ec2672222d94af3ef173162d06bb6b9b7ea8b7ad`
+
+The original pre-test suite had **251 passing tests**, including history branches,
+same-latest/different-earlier cases, API leakage boundaries, evidence-versus-guess
+abstention, exhaustive depth certificates, budget/repeat legality, deterministic
+model roundtrip, split/provenance integrity, lifecycle freeze, and all historical
+regressions. Existing UI semantics and historical Stage 3/4/sequential artifacts
+and models are unchanged.
+
+Post-test review added strict model schema/type/feature/weight/provenance checks,
+exact archive inventory and stored-record validation, historical archived-code
+report replay, and the labeled continuation demo. The suite then passed **274
+tests** (35 dog-history tests plus the 239 earlier tests). These are explicitly
+**post-test validation/interface changes**, not new learned-policy performance:
+original model weights, frozen source archive, raw results, and original report
+bytes remain unchanged. Live execution correctly rejects that old source freeze;
+historical readback uses its verified archive. No official test was rerun.
+
+Seven historical dog-report/demo checks require the local frozen
+`.runtime/dog-history-v1` artifact. They explicitly skip when it is absent, as on
+a fresh source-only checkout; they do not download, publish, or reconstruct an
+official test run. Development-only lifecycle/model tests remain runnable without
+that artifact. This publication-portability correction changes tests only, not
+the saved experiment or its results.
+
+Publication review also fixed completed-experiment demo dispatch: current archives
+call their direct demonstration implementation rather than re-entering historical
+dispatch recursively; older archives retain their original direct entry point.
+Separate subprocess regression tests cover both forms. This is an interface fix,
+not another evaluation or a change to frozen models, sources, raw results or reports.
+
+## Context-first inquiry: asker purpose, abstractions, then details
+
+This separate bounded task implements the refined question: **what does the asker
+need to find out, and which evidence should narrow the interpretation space next?**
+It has two illustrative interfaces over one compatibility/learning engine:
+
+- **Dog at the door:** distinguish an explanation request, an outside-directed
+  assessment, or characterization of an observed change. Explicit worry is stored
+  as concern, not as evidence of illness or discomfort. This is not a real animal
+  model, diagnosis, or treatment recommendation.
+- **"Use a linked list":** distinguish the requested means from underlying
+  operation constraints, such as indexed access, stable handles, or splicing.
+  When the structure is explicitly required for implementation or education,
+  honor that requirement instead of automatically reconsidering the representation.
+  The output is a supported toy requirement profile or scoped fit assessment,
+  **not production data-structure design advice or generated linked-list code**.
+
+Each interface declares four broad families and sixteen finer profiles. These are
+hand-constructed illustrative categories, not a universal abstraction ontology.
+The domains share the same implementation and deliberately similar branching
+structure; they are not two independent demonstrations of general intelligence.
+
+### Context is not evidence about the world
+
+Unknown intent makes a context clarification the only lawful initial action.
+This is an **explicit API rule**, not a learned discovery that clarification is
+needed. The answer supplies a goal; it does not remove any physical/requirement
+candidate. Known explicit context skips clarification. Ambiguous intent causes
+abstention rather than an invented purpose.
+
+The same physical answer pattern is crossed with six context variants. All six
+stay in one split and one statistical unit. Worried and curious explanation
+contexts share the same physical evidence model; changing a goal changes relevance
+and the scope of an answer, never the underlying hidden profile.
+
+There are at most four world/requirement questions, plus one clarification when
+needed. Each actual question costs one. Scoped goals may resolve while several
+fine profiles remain; a practical outside-interest question need not demand the
+same detail as "explain the pattern." Repeats are illegal, unknown observations
+retain compatible candidates, and observed contradictions or unlisted answer
+tokens cause explicit abstention. No minimum-question gate forces a long trace.
+
+### What narrows, and what is learned
+
+An explicit **nonlearned compatibility filter** retains every profile consistent
+with the observed answers. Traces show before/after groups and leaves, evidence
+links, count reductions, and log2 candidate-count entropy. Counts assume uniform
+candidate weighting for description; they are **not calibrated probabilities**.
+Zero surviving profiles means inconsistency, not perfect narrowing or certainty.
+An out-of-model cause that mimics a modeled observation sequence cannot necessarily
+be detected, especially if inquiry stops before the contradictory answer is asked.
+
+The actual learned component is an add-one-smoothed question-preference table,
+fitted to **1,014 development trajectory states**. Keys contain the supplied or
+clarified goal, concern, asked-question set and compatible state derived from the
+full history. The memoryless ranking ablation keeps the goal/concern and latest
+answer; both policies share the full-history evidence and terminal-goal machinery.
+Unseen learned states explicitly abstain.
+
+Training labels use development-only future-answer search to reward eventual
+scoped resolution, immediate relevant narrowing, group/leaf reductions and cost.
+The numeric score is
+`100*reachable + 30*resolved + 12*projection_reduction + 3*group_reduction +
+leaf_reduction - 2*remaining_cost`, with the declared finite-budget penalty when
+unreachable. All maximum-score ties are accepted. These are design weights, not
+probabilities. Training histories include declared reference trajectories,
+history-contrast examples, and a hand-authored public branching traversal:
+**the learner learns preferences on deliberately supplied examples; it does not
+discover the ontology, questions, or traversal curriculum**.
+
+The comparators are fixed order, memoryless learned ranking, history-aware learned
+ranking, and nonlearned public-model information gain. A fifth `reference` row
+uses evaluator-only future answers and is **an oracle, not a fair deployable agent**.
+Its choices and hindsight tie annotations are kept separate from agent evidence.
+
+### Actual learned branches and context-first demonstrations
+
+Development checks verify the fitted choices, not just oracle-optimal examples:
+
+| Domain / fine-explanation goal | Learned first world question | If yes, next question | If no, next question |
+| --- | --- | --- | --- |
+| Dog | Active movement at the entry? | Outdoor-cue response? | Timing linked to a person? |
+| Linked-list requirements | Stable handles or cheap splicing needed? | Stable external handles? | Frequent numeric indexing? |
+
+Additional checks hold the latest answer, legal questions, and budget identical
+while changing an earlier answer; the history learner changes its next question
+in both domains, while the latest-answer ablation does not. Explicit goals also
+change actual learned rankings without changing the initial compatible worlds.
+
+Example validation demonstrations:
+
+- Dog episode `7e7fb33077dc8eefd0f6`: clarify explanation goal; active-entry
+  answer yes; outdoor cue no; first-half sequence yes; second-half sequence no.
+  Result: `entry_pause_then_settle`, explicitly within the toy catalogue.
+- Linked-list episode `e76a2c9402d67ea6f4ad`: clarify underlying requirements;
+  handles/splicing yes; stable handles yes; first-half recurrence no; second-half
+  recurrence no. Result: `stable_external_handles`, not blindly accepting the
+  initially requested implementation.
+
+In each example, clarification keeps **4 groups / 16 profiles** unchanged.
+World observations then narrow to **2/8, 1/4, 1/2, 1/1**. These readable examples
+demonstrate implemented behavior; they are not selected test cases or evidence
+that the learned policy always follows an optimal path.
+
+### Declaration, evaluation discipline, and commands
+
+Each split has **38 world units**, nineteen per domain (sixteen modeled profiles
+plus unknown-evidence, inconsistent, and out-of-model cases). Crossing six contexts
+produces **228 rows per split**, not 228 independent worlds. Train, validation,
+and test have distinct full domain/answer patterns but share all modeled profiles
+and the finite compatibility mechanism; their variation is primarily nuisance
+answers. This is not a held-out ontology, domain, or unknown-mechanism experiment.
+No policy-outcome filtering selects the test cohort.
+
+The original development artifact is retained at `.runtime/abstraction-experiment`.
+Before official evaluation, review fixed an invalid demo-ID fallback and prevented
+archived demo execution from writing bytecode into its immutable archive.
+The final source snapshot is `.runtime/abstraction-context-final`; both learned
+models and all validation result bytes reproduced **exactly** across this
+pre-test packaging correction. No policy weights, generator, scoring criteria,
+or validation outcomes were changed to improve performance.
+
+Inside the activated WSL environment, inspect the final report and demonstrations:
+
+```bash
+python -m intuition_prototype.abstraction_benchmark report .runtime/abstraction-context-final
+python -m intuition_prototype.abstraction_benchmark demo .runtime/abstraction-context-final --domain dog --episode-id 7e7fb33077dc8eefd0f6
+python -m intuition_prototype.abstraction_benchmark demo .runtime/abstraction-context-final --domain linked_list --episode-id e76a2c9402d67ea6f4ad
+```
+
+Demo stdout is structured JSON with question text, actual answers, before/after
+candidates, model scores/provenance, and the scoped result. It uses validation
+episodes, never silently substitutes an unknown episode ID, and marks hindsight
+reference annotations separately. The original Gradio resource UI is unchanged;
+these are separate CLI interfaces.
+
+To reproduce development in a **new** directory:
+
+```bash
+python -m intuition_prototype.abstraction_benchmark prepare .runtime/my-context-development
+python -m intuition_prototype.abstraction_benchmark train .runtime/my-context-development
+```
+
+Official execution requires a reviewed `freeze` and an explicit one-use
+`evaluate` authorization. Do not rerun an inspected test and describe it as fresh.
+The archive preserves protocol/splits, exact executable sources, strict models,
+validation traces, and sealed provenance; historical report reload checks the
+stored artifact identities without silently using changed live rendering.
+
+### Required means: post-evaluation acceptance correction
+
+The original frozen v2 menu omitted the positive case where a linked list really
+is required. The live **`abstraction-inquiry-v3-required-means`** menu now includes
+`linked_required_structure`, covering an explicit implementation requirement or
+an educational exercise about that structure.
+
+This goal terminates at **scope acceptance**, without pretending implementation is
+complete. With the requirement supplied explicitly, it asks zero questions; if
+the requirement is learned from the goal clarification, it asks exactly one.
+Both leave all **four requirement families and sixteen profiles** compatible:
+the requested structure does not establish an operation profile or its suitability.
+An ordinary, unexplained "use a linked list" request still permits clarification;
+the positive case is never inferred just from the phrase.
+
+Run either live acceptance demonstration without a model or runtime directory:
+
+```bash
+python -m intuition_prototype.abstraction_benchmark required-linked-list
+python -m intuition_prototype.abstraction_benchmark required-linked-list --clarified
+```
+
+The JSON explicitly says `code_generated: false`, includes the retained uncertainty,
+and states that no linked-list code was generated, implemented, or tested. This is
+a **deterministic context/terminal-rule correction**, not newly learned behavior.
+The live generator also includes explicit and clarified required-structure
+variants for each linked-list world, so future training/evaluation can cover the
+positive case rather than force every request through representation selection.
+Future live partitions have six dog and eight linked-list contexts (266 rows per
+split); the historical v2 results below still describe six contexts in each domain.
+
+**No v3 model was fitted or test rerun.** The original v2 models, archive, raw
+results and report remain unchanged, and historical report/demo CLI readback uses
+that version's verified archive. The acceptance fix passed **17 targeted tests**,
+including required-means CLI, zero/one-question depth, unchanged world candidates,
+context separation, existing learned branches, grouped split regressions and
+isolated archived imports.
+The earlier 307-test result applies to the pre-correction v2 source.
+
+Real historical-demo verification also exposed a v2 archive-loading defect:
+without an archived package initializer, ordinary module lookup could select the
+installed live package and recursively redispatch after source changes. The live
+loader now explicitly imports the verified archive in an isolated, no-bytecode
+process. V2's omitted `records`/`simulator` helper dependencies are checked against
+their preserved source hashes and disclosed in the demo output; future archives
+include them directly. The original v2 archive was not modified. Its historical
+demo now completes with the entire artifact inventory byte-identical.
+
+### Single frozen v2 test: actual outcomes and failures
+
+After reviewing development traces and passing **307 tests**, the final source,
+protocol, split and model identities were sealed and the official test executed
+**once**. The final development preparation reproduced both original model
+documents and validation results byte-for-byte. No weights, questions, scoring
+rules, or source files were changed to tune these results. The later required-means
+acceptance correction is separately versioned above and was not evaluated here.
+
+The test contains **38 world units / 228 context-crossed rows / 1,140 policy
+episodes**. The oracle row is included only as a separately labeled reference.
+
+| Policy | Scoped resolutions | Scorable correct answers | Resolved but unscorable | Fine-profile resolutions | Mean questions | Abstentions |
+| --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| Fixed order | 90/228 | 85 | 5 | 0 | 2.6667 | 138 |
+| Memoryless learned | 180/228 | 168 | 12 | 88 | 2.5088 | 48 |
+| History-aware learned | 180/228 | 168 | 12 | 88 | 2.5088 | 48 |
+| Nonlearned information gain | 177/228 | 165 | 12 | 85 | 2.5088 | 51 |
+| Future-answer oracle, not deployable | 184/228 | 168 | 16 | 91 | 2.2895 | 44 |
+
+**Denominators matter:** the generated report's `correct resolved` /
+`correct_goal_resolution_rate` is correctness **conditional on a resolved answer
+with scorable modeled truth**, not correctness across all 228 rows. Its value
+1.0 therefore does not mean every episode was solved, nor that exception-case
+answers were correct. The table above exposes the excluded counts. A fine-profile
+resolution is also a compatibility result, not necessarily validated truth for
+an exceptional world.
+
+History-aware outcomes by interface:
+
+| Interface | Rows | Scoped resolutions | Scorable correct | Mean questions |
+| --- | ---: | ---: | ---: | ---: |
+| Dog | 114 | 91 | 85 | 2.7456 |
+| Linked-list requirements | 114 | 89 | 83 | 2.2719 |
+
+History and memoryless tie on resolution at **all 38 world units**. Against fixed
+order, history wins on 37 units and ties on one (mean paired difference +0.3947);
+against information gain it wins on one and ties on 37 (+0.0132). These are
+descriptive paired counts with all six contexts kept together, not independent
+row-level significance tests or broad generalization claims.
+
+All policies obeyed action legality, repeat and budget bounds. Each paid 76 total
+clarifications across the 228 rows (mean 0.3333); explicit-context rows did not
+repeat that question. History's remaining 496 cost units were actual observation
+questions. Its 48 abstentions comprised 38 unresolved-intent cases, eight observed
+out-of-model answers, and two physical-budget exhaustion cases.
+
+**Observed boundary failure:** on the twelve inconsistent-world context variants,
+history returned ten scoped answers and abstained on two unknown intents. On the
+twelve out-of-model variants, it returned two scoped answers, detected the unusual
+answer in eight, and abstained on two unknown intents. Those twelve emitted
+exception answers are unscorable, not successes against ground truth. The policy
+can stop on a compatible prefix before asking a contradiction-revealing question.
+Zero `unsupported_answer` merely confirms its programmed compatibility gate;
+it does not establish comprehensive model checking. Unknown-evidence cases had
+eight scoped answers and four abstentions; all sixteen modeled profiles with
+known intent were resolved by the history learner.
+
+### Depth, overlap, and what the result establishes
+
+Stored per-row reference certificates give shortest total inquiry depth:
+**71 at depth 1, 28 at 2, 26 at 3, 42 at 4, 17 at 5, and 44 unresolved**.
+Depth includes a clarification only when context is unknown. Thus 85 rows require
+at least three total questions, but they are correlated context variants.
+World-question depth is not merely clarification padding: among modeled explicit
+fine-explanation rows, dog has 18 depth-4, 12 depth-3 and two depth-2 rows (two
+concern variants per world); linked-list requirements has eight depth-4 and eight
+depth-3 rows. The certificate applies only to these finite permitted questions,
+compatibility rules, scoped goals and budget, not to the impossibility of guessing
+or the necessary steps of human reasoning.
+
+For example, explicit-goal test row `eda3ea8a7f6e72c4aec1` requires four dog
+observations, and `114e4c2c386efdd8df26` requires four linked-list requirement
+observations. Their shortest paths and per-row metadata are retained in the raw
+test artifact. All short, deep, ambiguous and exceptional cases remain included;
+none was selected because a learned policy succeeded.
+
+Exact full domain/answer patterns do not overlap between splits, but **1,047 of
+1,118 possible test partial answer subsets of sizes 1..3 also occur in training**.
+All sixteen modeled profiles per domain occur in every split. Consequently this
+test mostly checks new nuisance combinations within a familiar, hand-built
+ontology. It does not establish learned abstraction discovery or transfer to an
+unseen domain. Deliberately supplied training traversals further limit the claim.
+
+**Conclusion:** the implementation now performs the requested context-first,
+evidence-conditioned narrowing, rather than simply executing repairs or classifying
+a dog label. Genuine learned branching is visible in both interfaces. However,
+history did not improve the aggregate test outcomes over the memoryless ranker,
+and unseen contradictions can escape detection. This is a working, bounded
+pattern-learning experiment with explicit limitations, not validated intuition.
+
+### Final provenance and verification
+
+- Protocol: `65f7c64d138b1554cddf0a392c9cf147bf5c9039c3d27eafd3f60b3862141a6b`
+- History model: `b6d66d907a4379d15ade07a9444417a2439ceba3edd88a72b1809349a0c66067`
+- Memoryless model: `0a1378fbfb2a99d01e8375e11dbfe8e5d23a3657c574c5469c62e13cebc6127e`
+- Final preparation file: `9febd4c85b9a22fa65836c8e389a320c54657de84caa74f3407d6f2d4efad5d6`
+- Reviewed freeze file: `e1bbd18a901f3a4dbcf2e64082cba75a1194cb1bd8ee58143bdd6ef9eb44cbcf`
+- Test raw traces: `28d65111b2c8a1a2f2ca97891815ec2426e5cda82acc750effba6ad4ba4d585e`
+
+The full **307-test suite passed** before the official run, including both-domain
+learned branches, context/truth isolation, source/model corruption checks,
+shortest-depth checks, explicit-context skipping, unknown/contradictory evidence,
+historical archived-demo byte preservation, and all prior regressions. Real CLI
+demonstrations for both domains were verified before the final freeze. Freeze
+verification plus official evaluation took about 269 seconds on this machine;
+this includes development replay and oracle work and is not policy inference
+time. No cloud calls, added dependencies, commit, or push were needed.
+
+Final readback independently checked all **1,140 stored records** against their
+allowed observed answers, compatible state, scoped goal, truth scoring where
+defined, question costs and evidence traces; this did not rerun selection policies
+or future-answer search. The real report CLI matched the sealed Markdown exactly.
+The final artifact contains 28 files, about 25.4 MiB. Prior Stage 3/4, sequential,
+and four-label dog artifacts remain intact and their historical reports reload.
+The existing resource UI remained HTTP 200 without a restart.
+
 ## Architecture boundary
 
 - `config.py`: explicit validated demo configuration.
@@ -912,6 +1835,18 @@ evaluation infrastructure, **not a successful intuition research hypothesis**.
 - `learned.py`: telemetry preprocessing, ridge fitting, strict model loading and learned scores.
 - `stage4_protocol.py`: new isolated configuration partitions and frozen experiment provenance.
 - `stage4.py`: development training/selection and three-policy test evaluation/reporting.
+- `sequential.py`: persistent intervention environment, exhaustive depth reference and named adapters.
+- `sequential_protocol.py`, `sequential_benchmark.py`: declared structural filtering,
+  matched shallow controls, frozen transfer evaluation and reports.
+- `dog_history.py`: public finite evidence model, lawful question API, deterministic
+  belief update, traces, and transparent fitted preference model.
+- `dog_history_protocol.py`, `dog_history_benchmark.py`: disjoint pattern splits,
+  exhaustive evidence-depth reference, four-policy lifecycle, freeze, reports, and CLI.
+- `abstraction_inquiry.py`: context-separated compatibility state, scoped goals,
+  history-conditioned fitted ranking, and two-domain observation API.
+- `abstraction_protocol.py`, `abstraction_benchmark.py`: crossed context/world
+  partitions, development training, bounded reference search, frozen comparison,
+  and context-first CLI demonstrations.
 - `benchmark_protocol.py`: declared parameter splits, frozen source/config fingerprints.
 - `benchmark.py`: independent counterfactual reference, paired evaluation and reports.
 - `storage.py`: original demo storage plus transactional typed episode persistence.
@@ -927,6 +1862,10 @@ evaluation infrastructure, **not a successful intuition research hypothesis**.
   development-only integration, integrity and report roundtrip.
 - `tests/test_learned.py`, `tests/test_stage4.py`: fitted-model behavior, data isolation,
   model/experiment integrity, development-only lifecycle integration and persistence.
+- `tests/test_dog_history.py`: history-dependent branches, API/evidence boundaries,
+  depth proof, fitted-model determinism, split isolation, and development lifecycle.
+- `tests/test_abstraction_inquiry.py`: two-domain context isolation, actual learned
+  branches, abstraction narrowing, bounded depth, strict provenance and CLI checks.
 
 All three policies are bounded research infrastructure, not the proposed open-ended
 learned investigative controller. Candidate discovery and fuse training remain deferred.
