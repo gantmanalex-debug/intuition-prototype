@@ -36,6 +36,29 @@ Successful scripted, heuristic, or learned traces do **not** validate the intuit
 hypothesis. Stage 3 adds a frozen, configuration-level comparative evaluation
 within the same simulator, not a test of unknown mechanisms.
 
+## Latest findings and conclusions
+
+The frozen Stage 4 test compared 48 configurations with two paired seeds each.
+Mean **utility / investigation cost** was **0.183276 / 8.281250** for scripted,
+**0.214807 / 4.500000** for heuristic, and **0.147435 / 2.593750** for learned.
+Utility is a synthetic score of useful completions and queue relief; cost is
+bounded inquiry-action units, **not money, runtime, or LLM tokens**.
+
+The learned selector used **42% less cost but delivered 31% lower utility than
+the heuristic**, and missed available benefit in **15/96 seeded cases**. Its
+conservative value threshold sometimes rejected an affordable alternative after
+the first intervention failed. **It is not a superior replacement for the
+heuristic**: this experiment demonstrates working learning/evaluation
+infrastructure and an underexploration failure, not validated learned intuition
+or generalization beyond this simulator.
+
+**Proposed, not implemented:** investigate underexploration and utility-estimate/
+abstention calibration using development data only, then freeze any revised
+policy before evaluating another untouched configuration split. Do not tune on
+these inspected test results. See [the detailed Stage 4 results](#first-frozen-test-negative-utility-result-lower-cost)
+and [limitations](#diversity-computation-artifacts-and-limitations) for uncertainty,
+failure traces, correlated behavior, and the full comparison.
+
 ## Selected platform
 
 - Windows host with existing WSL2 Ubuntu 24.04.3 LTS.
